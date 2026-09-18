@@ -19,6 +19,27 @@
   // (โครงสร้างต้องเป็น <base>/<id>.png และ <base>/versions/generation-v/black-white/animated/<id>.gif)
   let BASE = window.PTD_SPRITE_BASE ||
     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon';
+
+  // โหมดแพ็ก: GIF ทั้งหมดถูกต่อกันเป็นไฟล์เดียวพร้อมดัชนี
+  // ใช้ตอนเผยแพร่เป็นหน้าเว็บ ซึ่งจำกัดจำนวนไฟล์ที่แนบได้
+  // window.PTD_ANIM_PACK = { b64: 'sprites/anim.b64.txt', idx: 'sprites/anim.json' }
+  // เก็บเป็น base64 ในไฟล์ข้อความ เพราะที่เผยแพร่รับเฉพาะชนิดไฟล์มาตรฐานของเว็บ
+  const PACK = window.PTD_ANIM_PACK || null;
+  let packPromise = null, packBuf = null, packIdx = null;
+
+  function loadPack() {
+    if (packPromise) return packPromise;
+    packPromise = (async () => {
+      const [idxR, binR] = await Promise.all([fetch(PACK.idx), fetch(PACK.b64)]);
+      if (!idxR.ok || !binR.ok) throw new Error('โหลดแพ็กสไปรท์ไม่ได้');
+      packIdx = await idxR.json();
+      const bin = atob((await binR.text()).trim());
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      packBuf = arr.buffer;
+    })();
+    return packPromise;
+  }
   const animURL  = (id) => `${BASE}/versions/generation-v/black-white/animated/${id}.gif`;
   const stillURL = (id) => `${BASE}/${id}.png`;
 
@@ -56,22 +77,39 @@
     }
   }
 
+  // ขึ้นภาพนิ่งให้เห็นก่อน (เร็วและแทบไม่มีทางพลาด)
+  // แล้วค่อยอัปเกรดเป็นแบบเคลื่อนไหวเบื้องหลัง — ผู้เล่นจึงไม่ต้องรอดูลูกบอลเปล่า
   async function load(id) {
     const e = cache.get(id);
     e.state = 'loading';
-    if (await loadAnimated(id, e)) return;
-    if (await loadStill(id, e)) return;
+    const still = await loadStill(id, e);
+    const anim = loadAnimated(id, e).catch(() => false);
+    if (still) { upgradeLater(anim); return; }
+    if (await anim) return;
     e.state = 'failed';
   }
+  function upgradeLater(p) { p.then(() => {}); }
 
   /* ---------- ทางหลัก: ถอดเฟรมจาก GIF ---------- */
+  async function animData(id) {
+    if (PACK) {
+      await loadPack();
+      const ent = packIdx[id];
+      if (!ent) return null;
+      return packBuf.slice(ent[0], ent[0] + ent[1]);
+    }
+    const resp = await fetch(animURL(id));
+    if (!resp.ok) return null;
+    return await resp.arrayBuffer();
+  }
+
   async function loadAnimated(id, e) {
     if (typeof ImageDecoder === 'undefined') return false;
     let dec = null;
     try {
-      const resp = await fetch(animURL(id));
-      if (!resp.ok) return false;
-      dec = new ImageDecoder({ data: await resp.arrayBuffer(), type: 'image/gif' });
+      const data = await animData(id);
+      if (!data) return false;
+      dec = new ImageDecoder({ data, type: 'image/gif' });
       await dec.tracks.ready;
       await dec.completed;
       const track = dec.tracks.selectedTrack;
@@ -89,7 +127,6 @@
         if (i % step === 0) {
           frames.push(await createImageBitmap(image));
           durs.push(0);           // เดี๋ยวเติมทีหลัง
-          if (!e.w) { e.w = image.displayWidth; e.h = image.displayHeight; }
         }
         if (i % step === step - 1 || i === n - 1) {
           durs[durs.length - 1] += pending;
@@ -99,10 +136,13 @@
       }
       if (!frames.length) return false;
 
+      // สลับทีเดียวตอนพร้อม เพื่อไม่ให้ลูปวาดเห็นสถานะครึ่ง ๆ กลาง ๆ
       let acc = 0;
+      const first = frames[0];
       e.cum = durs.map(d => (acc += Math.max(16, d)));
       e.total = acc;
       e.frames = frames;
+      e.w = first.width; e.h = first.height;
       e.kind = 'anim';
       e.state = 'ready';
       return true;
@@ -222,6 +262,8 @@
     setBase(url) { BASE = url.replace(/\/$/, ''); cache.clear(); },
     get ready() { let n = 0; for (const e of cache.values()) if (e.state === 'ready') n++; return n; },
     get pending() { return queue.length + active; },
-    stateOf(id) { const e = cache.get(id); return e ? e.state : 'none'; }
+    stateOf(id) { const e = cache.get(id); return e ? e.state : 'none'; },
+    // ใช้ตอนทดสอบ: บอกว่าตัวนี้กำลังใช้ภาพเคลื่อนไหวหรือภาพนิ่ง
+    debugKind(id) { const e = cache.get(id); return e ? (e.kind || e.state) : 'none'; }
   };
 })(window.PTD = window.PTD || {});
