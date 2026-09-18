@@ -85,56 +85,41 @@
   };
 
   const cache = new Map();
+  const megaCache = new Map();
 
   /* ================= ป้อม ================= */
-  function tower(id) {
-    if (cache.has(id)) return cache.get(id);
-    const d = PTD.dex(id);
-    if (!d) return null;
-
-    const st = d.s;
+  // แกนกลางของการแปลงสเตตัส -> ค่าในเกม ใช้ได้ทั้งร่างปกติและร่างเมก้า
+  function buildTower(spec) {
+    const st = spec.stats;
     const atk = st[S.ATK], spa = st[S.SPA], spe = st[S.SPE];
     const power = Math.max(atk, spa);
     const ratio = spa / (atk + spa);
 
-    const moveType = moveTypeOf(d.t);
+    const moveType = moveTypeOf(spec.types);
     const style = STYLE[moveType] || STYLE.Normal;
 
     let range = TUNE.RANGE_MIN + Math.pow(ratio, 1.5) * TUNE.RANGE_SPAN;
     let attack = style.kind;
-    // ตัวที่ Atk นำ SpA ชัดเจน ให้เป็นสายประชิดไม่ว่าธาตุอะไร
     if (range < TUNE.MELEE_MAX && attack !== 'beam') attack = 'melee';
     if (attack === 'melee') range = clamp(range, 62, 96);
     if (style.fast) range *= 1.12;
 
     let rate = TUNE.RATE_BASE + spe / TUNE.RATE_SPE;
-    let dmg = power * (0.75 + d.bst / 1200) * TUNE.DMG;
+    let dmg = power * (0.75 + spec.bst / 1200) * TUNE.DMG;
 
     if (attack === 'melee') rate *= 1.9;
     if (style.heavy) { rate *= .72; dmg *= 1.55; }
     if (attack === 'chain') dmg *= .85;
 
-    const cost = costOf(d);
-
-    // ร่างถัดไป (Eevee มีสามทาง เก็บไว้ทั้งหมด)
-    const evolveTo = d.to.slice();
-    let evolveLv = 5, evoNote = '';
-    if (evolveTo.length) {
-      const next = PTD.dex(evolveTo[0]);
-      const e = next && next.evo;
-      if (e && e.lv) { evolveLv = clamp(Math.round(e.lv / 3.6), 3, 13); evoNote = 'เลเวล ' + e.lv; }
-      else if (e && e.t === 'trade') { evolveLv = 8; evoNote = 'แลกเปลี่ยน'; }
-      else if (e && e.t === 'use-item') { evolveLv = 6; evoNote = 'ใช้หินวิวัฒนาการ'; }
-      else { evolveLv = 6; evoNote = 'ความสนิทสนม'; }
-    }
-
     const t = {
-      id, dexId: id,
-      name: d.name || d.n, jp: d.jp,
-      types: d.t, moveType,
-      legendary: !!d.lg,
-      bst: d.bst, stats: st,
-      cost,
+      dexId: spec.dexId,
+      speciesId: spec.speciesId != null ? spec.speciesId : spec.dexId,
+      name: spec.name, jp: spec.jp || '',
+      types: spec.types, moveType,
+      legendary: !!spec.legendary,
+      isMega: !!spec.isMega,
+      bst: spec.bst, stats: st,
+      cost: spec.cost || 0,
       dmg: Math.round(dmg * 10) / 10,
       range: Math.round(range),
       rate: Math.round(rate * 100) / 100,
@@ -149,16 +134,59 @@
       effect: style.fx ? Object.assign({}, style.fx) : null,
       move: SIGNATURE[moveType] || 'Tackle',
       desc: STYLE_TH[attack] || '',
-      evolveTo, evolveLv, evoNote,
-      evolveCost: evolveTo.length ? Math.round(costOf(PTD.dex(evolveTo[0])) * .85 / 5) * 5 : 0
+      evolveTo: spec.evolveTo || [],
+      evolveLv: spec.evolveLv || 5,
+      evoNote: spec.evoNote || '',
+      evolveCost: spec.evolveCost || 0
     };
-
-    // ปรับความแรงของสถานะผิดปกติตามพลังจริงของตัวนั้น
     if (t.effect) {
       if (t.effect.dps == null) t.effect.dps = Math.round(t.dmg * .45);
       if (t.effect.power == null) t.effect.power = .3;
     }
+    return t;
+  }
+
+  function tower(id) {
+    if (cache.has(id)) return cache.get(id);
+    const d = PTD.dex(id);
+    if (!d) return null;
+
+    const evolveTo = d.to.slice();
+    let evolveLv = 5, evoNote = '';
+    if (evolveTo.length) {
+      const next = PTD.dex(evolveTo[0]);
+      const e = next && next.evo;
+      if (e && e.lv) { evolveLv = clamp(Math.round(e.lv / 3.6), 3, 13); evoNote = 'เลเวล ' + e.lv; }
+      else if (e && e.t === 'trade') { evolveLv = 8; evoNote = 'แลกเปลี่ยน'; }
+      else if (e && e.t === 'use-item') { evolveLv = 6; evoNote = 'ใช้หินวิวัฒนาการ'; }
+      else { evolveLv = 6; evoNote = 'ความสนิทสนม'; }
+    }
+
+    const t = buildTower({
+      dexId: id, name: d.name || d.n, jp: d.jp, types: d.t, stats: d.s,
+      bst: d.bst, legendary: !!d.lg, cost: costOf(d),
+      evolveTo, evolveLv, evoNote,
+      evolveCost: evolveTo.length ? Math.round(costOf(PTD.dex(evolveTo[0])) * .85 / 5) * 5 : 0
+    });
     cache.set(id, t);
+    return t;
+  }
+
+  /* ร่างเมก้า — สร้างจากสเตตัสจริงของร่างนั้น ไม่ใช่บวกเปอร์เซ็นต์มั่ว ๆ */
+  function megaTower(formId) {
+    if (megaCache.has(formId)) return megaCache.get(formId);
+    const m = PTD.MEGA.find(x => x.form === formId);
+    if (!m) return null;
+    const base = PTD.dex(m.of);
+    const t = buildTower({
+      dexId: m.form, speciesId: m.of,
+      name: m.n, jp: base ? base.jp : '',
+      types: m.t, stats: m.s, bst: m.bst,
+      legendary: !!(base && base.lg), isMega: true, cost: 0
+    });
+    t.stone = m.stone;
+    t.variant = m.v;
+    megaCache.set(formId, t);
     return t;
   }
 
@@ -209,6 +237,8 @@
 
   PTD.MAX_LEVEL = 30;
   PTD.tower = tower;
+  PTD.megaTower = megaTower;
+  PTD.buildTower = buildTower;
   PTD.enemy = enemy;
   PTD.shopList = shopList;
   PTD.moveTypeOf = moveTypeOf;

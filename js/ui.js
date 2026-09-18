@@ -1,36 +1,19 @@
 /* =====================================================================
- * ui.js — ส่วนติดต่อผู้ใช้
- *   ร้านค้า (ค้นหา/กรองธาตุ/เรียงลำดับ) · แผงข้อมูลป้อม · HUD · จอจบเกม
+ * ui.js — ส่วนติดต่อผู้ใช้ทุกหน้าจอ
+ *   starter · world · party · dex · safari (แถบข้าง+มินิเกมจับ) · battle
  * ===================================================================== */
 (function (PTD) {
   'use strict';
 
   const $ = (id) => document.getElementById(id);
-  let G = null;
-  let shopIds = [];          // id ที่ซื้อได้ทั้งหมด
-  let visible = [];          // id ที่ผ่านตัวกรองตอนนี้
-  const filter = { text: '', type: '', sort: 'cost' };
+  let app = null;
 
   const fmt = (n) => Math.round(n).toLocaleString('en-US');
   const dexNo = (id) => '#' + String(id).padStart(3, '0');
-
-  function typeBadge(t) {
-    const s = document.createElement('span');
-    s.className = 'tbadge';
-    s.style.background = PTD.TYPE_COLOR[t];
-    s.textContent = PTD.TYPE_TH[t] || t;
-    return s;
-  }
-
-  function spriteImg(id, px, cls) {
-    const im = document.createElement('img');
-    im.src = PTD.sprites.stillURL(id);
-    im.alt = '';
-    im.loading = 'lazy';
-    im.width = im.height = px;
-    im.className = cls || 'psprite';
-    return im;
-  }
+  const sprite = (id, cls) =>
+    `<img class="psprite ${cls || ''}" src="${PTD.sprites.stillURL(id)}" alt="" loading="lazy">`;
+  const badge = (t) =>
+    `<span class="tbadge" style="background:${PTD.TYPE_COLOR[t]}">${PTD.TYPE_TH[t]}</span>`;
 
   /* ---------------- ทูลทิป ---------------- */
   let tip = null;
@@ -38,14 +21,20 @@
     if (!tip) { tip = document.createElement('div'); tip.id = 'tip'; document.body.appendChild(tip); }
     tip.innerHTML = html;
     tip.style.display = 'block';
-    const pad = 14;
-    let x = ev.clientX + pad, y = ev.clientY + pad;
     const rc = tip.getBoundingClientRect();
-    if (x + rc.width > innerWidth - 8) x = ev.clientX - rc.width - pad;
+    let x = ev.clientX + 14, y = ev.clientY + 14;
+    if (x + rc.width > innerWidth - 8) x = ev.clientX - rc.width - 14;
     if (y + rc.height > innerHeight - 8) y = Math.max(8, innerHeight - rc.height - 8);
     tip.style.left = x + 'px'; tip.style.top = y + 'px';
   }
   function hideTip() { if (tip) tip.style.display = 'none'; }
+
+  function bindTips(root) {
+    root.querySelectorAll('[data-tip-mon]').forEach(el => {
+      el.addEventListener('mousemove', (ev) => showTip(monTip(Number(el.dataset.tipMon)), ev));
+      el.addEventListener('mouseleave', hideTip);
+    });
+  }
 
   function effText(ef) {
     if (!ef) return null;
@@ -60,151 +49,554 @@
     return null;
   }
 
-  function towerTip(def) {
-    const line = (k, v) => `<div class="tl"><span>${k}</span><b>${v}</b></div>`;
+  function monTip(speciesId, lv) {
+    const def = PTD.tower(speciesId);
+    if (!def) return '';
+    const d = PTD.dex(speciesId);
     const st = def.stats;
-    const lineIds = PTD.line(def.dexId);
     const ef = effText(def.effect);
+    const line = (k, v) => `<div class="tl"><span>${k}</span><b>${v}</b></div>`;
+    const megas = PTD.megasOf(speciesId);
     return `
-      <div class="tip-h">${def.name} <em>${dexNo(def.dexId)} · ${def.jp}</em></div>
-      <div class="tip-types">${def.types.map(t =>
-        `<span class="tbadge" style="background:${PTD.TYPE_COLOR[t]}">${PTD.TYPE_TH[t]}</span>`).join('')}</div>
+      <div class="tip-h">${def.name} <em>${dexNo(speciesId)} · ${def.jp}</em></div>
+      <div class="tip-types">${def.types.map(badge).join('')}</div>
       <div class="tip-move">${def.move}
         <span class="mt" style="color:${PTD.TYPE_COLOR[def.moveType]}">(${PTD.TYPE_TH[def.moveType]})</span>
         — ${def.desc}</div>
       ${line('พลังโจมตี', fmt(def.dmg))}
       ${line('ระยะ', fmt(def.range))}
       ${line('ความเร็ว', def.rate.toFixed(2) + '/วิ')}
-      ${line('DPS โดยประมาณ', fmt(def.dmg * def.rate * (def.targets || 1)))}
       ${def.splash ? line('รัศมีระเบิด', def.splash) : ''}
       ${def.chains ? line('กระโดดต่อ', def.chains + ' ตัว') : ''}
-      ${def.pierce ? line('ทะลุ', def.pierce + ' ตัว') : ''}
       ${def.targets > 1 ? line('ตีพร้อมกัน', def.targets + ' เป้า') : ''}
       ${def.ignoreArmor ? line('พิเศษ', 'ทะลุเกราะ') : ''}
       ${ef ? line('ผลข้างเคียง', ef) : ''}
-      <div class="tip-base">สเตตัสจริง · HP ${st[0]} · Atk ${st[1]} · Def ${st[2]}
-        · SpA ${st[3]} · SpD ${st[4]} · Spe ${st[5]} · <b>BST ${def.bst}</b></div>
-      ${lineIds.length > 1 ? `<div class="tip-evo">สาย: ${lineIds.map(i => PTD.dex(i).n).join(' → ')}</div>` : ''}
-    `;
+      <div class="tip-base">HP ${st[0]} · Atk ${st[1]} · Def ${st[2]} · SpA ${st[3]}
+        · SpD ${st[4]} · Spe ${st[5]} · <b>BST ${def.bst}</b> · อัตราจับ ${d.cr}</div>
+      ${megas.length ? `<div class="tip-mega">⚡ เมก้าได้: ${megas.map(m => m.n).join(' / ')}
+        — ต้องมีหิน ${megas[0].stone}</div>` : ''}`;
+  }
+
+  /* ---------------- โครงหน้าจอ ---------------- */
+  function showDom(html) {
+    hideTip();
+    $('canvasView').hidden = true;
+    const d = $('domScreen');
+    d.hidden = false;
+    d.innerHTML = html;
+    return d;
+  }
+
+  function showCanvas(kind) {
+    hideTip();
+    $('domScreen').hidden = true;
+    $('canvasView').hidden = false;
+    $('endscreen').hidden = true;
+    if (kind === 'safari') buildSafariSide();
+    else buildBattleSide();
+  }
+
+  /* ---------------- แถบบน ---------------- */
+  function syncHud() {
+    const s = PTD.save;
+    const sc = app.screen;
+    const stats = [];
+    if (sc !== 'starter') {
+      stats.push(`<div class="stat money"><span class="ico">₽</span><b id="money">${fmt(
+        sc === 'battle' ? PTD.battle.money : s.money)}</b></div>`);
+      stats.push(`<div class="stat"><span class="ico">⚪</span><b id="balls">${s.balls}</b></div>`);
+      if (sc === 'battle') {
+        stats.push(`<div class="stat heart"><span class="ico">❤</span><b id="lives">${PTD.battle.lives}</b></div>`);
+        stats.push(`<div class="stat"><span class="lbl">เวฟ</span><b id="wave">–</b></div>`);
+      } else {
+        stats.push(`<div class="stat"><span class="lbl">เด็กซ์</span><b>${s.dexCaught}/151</b></div>`);
+        stats.push(`<div class="stat"><span class="lbl">ทีม</span><b>${s.data.party.length}/6</b></div>`);
+      }
+    }
+    $('hudStats').innerHTML = stats.join('');
+
+    const acts = [];
+    if (sc === 'battle') {
+      acts.push('<button id="btnWave" class="primary">เริ่มเวฟ ▶</button>');
+      acts.push('<button id="btnSpeed" class="icon" title="ความเร็ว (X)">1x</button>');
+      acts.push('<button id="btnPause" class="icon" title="พัก (Space)">⏸</button>');
+      acts.push('<button id="btnQuit" class="icon" title="ออกจากด่าน">✕</button>');
+    } else if (sc === 'safari') {
+      acts.push('<button id="btnQuit" class="primary">กลับแผนที่โลก</button>');
+    } else if (sc !== 'starter') {
+      acts.push('<button data-go="world" class="nav">แผนที่โลก</button>');
+      acts.push('<button data-go="party" class="nav">จัดทีม</button>');
+      acts.push('<button data-go="dex" class="nav">โปเกเด็กซ์</button>');
+    }
+    acts.push('<button id="btnSound" class="icon" title="เสียง">🔊</button>');
+    acts.push('<button id="btnHelp" class="icon" title="วิธีเล่น">?</button>');
+    $('hudActions').innerHTML = acts.join('');
+
+    $('hudActions').querySelectorAll('[data-go]').forEach(b =>
+      b.addEventListener('click', () => app.go(b.dataset.go)));
+    const q = $('btnQuit');
+    if (q) q.onclick = () => {
+      if (app.screen === 'battle' && PTD.battle.state !== 'won' && PTD.battle.state !== 'lost') {
+        if (!confirm('ออกจากด่านตอนนี้? ความคืบหน้าในด่านจะหาย')) return;
+      }
+      app.go('world');
+    };
+    const snd = $('btnSound');
+    if (snd) {
+      snd.textContent = PTD.audio.enabled ? '🔊' : '🔇';
+      snd.onclick = () => { PTD.audio.toggle(); syncHud(); };
+    }
+    const hlp = $('btnHelp');
+    if (hlp) hlp.onclick = () => { $('help').hidden = !$('help').hidden; };
+
+    if (sc === 'battle') {
+      $('btnWave').onclick = () => { PTD.audio.unlock(); PTD.battle.startWave(); };
+      $('btnSpeed').onclick = () => {
+        const B = PTD.battle;
+        B.speed = B.speed === 1 ? 2 : (B.speed === 2 ? 3 : 1);
+        $('btnSpeed').textContent = B.speed + 'x';
+      };
+      $('btnPause').onclick = () => {
+        PTD.battle.paused = !PTD.battle.paused;
+        $('btnPause').textContent = PTD.battle.paused ? '▶' : '⏸';
+      };
+    }
+  }
+
+  /* ---------------- หน้าเลือกตัวเริ่มต้น ---------------- */
+  function showStarter() {
+    const picks = [1, 4, 7, 25];
+    const d = showDom(`
+      <div class="wide">
+        <h1 class="big-title">เริ่มการผจญภัย</h1>
+        <p class="lead">เลือกโปเกม่อนตัวแรกของคุณ — ที่เหลืออีก 150 ตัวต้องออกไปจับเอง</p>
+        <div class="starter-row">${picks.map(id => {
+          const t = PTD.tower(id);
+          return `<button class="starter-card" data-id="${id}" data-tip-mon="${id}">
+            ${sprite(id, 'huge')}
+            <div class="sc-name">${t.name}</div>
+            <div class="sc-jp">${dexNo(id)} · ${t.jp}</div>
+            <div class="sc-types">${t.types.map(badge).join('')}</div>
+            <div class="sc-note">${t.desc}</div>
+          </button>`;
+        }).join('')}</div>
+      </div>`);
+    bindTips(d);
+    d.querySelectorAll('.starter-card').forEach(b => b.addEventListener('click', () => {
+      const id = Number(b.dataset.id);
+      PTD.save.addMon(id, 5);
+      PTD.save.data.started = true;
+      PTD.save.persist();
+      PTD.sfx.evolve();
+      app.go('world');
+    }));
+  }
+
+  /* ---------------- แผนที่โลก ---------------- */
+  function showWorld() {
+    const C = PTD.campaign, s = PTD.save;
+
+    const stages = C.STAGES.map(st => {
+      const open = C.stageUnlocked(st), done = s.isCleared(st.id);
+      return `<button class="loc ${open ? '' : 'locked'} ${done ? 'done' : ''}"
+                data-stage="${st.id}" ${open ? '' : 'disabled'}>
+        <div class="loc-no">ด่าน ${st.no}</div>
+        <div class="loc-name">${st.name}${done ? ' ✓' : ''}</div>
+        <div class="loc-desc">${open ? st.desc : 'ต้องผ่านด่านก่อนหน้าก่อน'}</div>
+        <div class="loc-meta">${st.waves} เวฟ · ${st.lives} หัวใจ · แผนที่${PTD.MAP_LAYOUTS[st.map].name}</div>
+        ${open ? `<div class="loc-reward">รางวัล ₽${fmt(st.reward.money)} · บอล ${st.reward.balls}${
+          st.reward.stone ? ` · หิน${PTD.megasOf(st.reward.stone)[0].stone}` : ''}</div>` : ''}
+      </button>`;
+    }).join('');
+
+    const zones = PTD.safari.unlockedZones().map(({ zone, unlocked }) => {
+      const pool = PTD.safari.poolOf(zone);
+      const caught = pool.filter(id => s.data.caught.includes(id)).length;
+      return `<button class="loc zone ${unlocked ? '' : 'locked'}"
+                data-zone="${zone.id}" ${unlocked ? '' : 'disabled'}>
+        <div class="loc-name">${zone.name}</div>
+        <div class="loc-desc">${unlocked ? `เจอได้ ${pool.length} สายพันธุ์ · เลเวล ${zone.lv[0]}–${zone.lv[1]}`
+                                         : `ต้องผ่านด่านที่ ${zone.need} ก่อน`}</div>
+        ${unlocked ? `<div class="loc-meta">จับแล้ว ${caught}/${pool.length}</div>
+          <div class="zone-strip">${pool.slice(0, 8).map(id =>
+            `<img class="psprite tiny ${s.data.caught.includes(id) ? '' : 'unknown'}"
+                  src="${PTD.sprites.stillURL(id)}" alt="">`).join('')}</div>` : ''}
+      </button>`;
+    }).join('');
+
+    const quests = C.QUESTS.map(q => {
+      const open = C.questUnlocked(q);
+      const done = s.questState(q.species) === 'done';
+      const p = C.questProgress(q);
+      return `<button class="loc quest ${open ? '' : 'locked'} ${done ? 'done' : ''}"
+                data-quest="${q.id}" ${open && !done ? '' : 'disabled'}>
+        <div class="q-head">${sprite(q.species, done ? '' : 'unknown')}
+          <div>
+            <div class="loc-name">${done ? PTD.dex(q.species).n : '???'}${done ? ' ✓' : ''}</div>
+            <div class="loc-no">${q.name}</div>
+          </div></div>
+        <div class="loc-desc">${done ? 'จับได้แล้ว' : q.desc}</div>
+        ${done ? '' : `<div class="q-need">
+          <span class="${p.stages[0] >= p.stages[1] ? 'ok' : ''}">ผ่านด่าน ${p.stages[0]}/${p.stages[1]}</span>
+          <span class="${p.caught[0] >= p.caught[1] ? 'ok' : ''}">จับได้ ${p.caught[0]}/${p.caught[1]} สายพันธุ์</span>
+        </div>`}
+      </button>`;
+    }).join('');
+
+    const party = s.partyMons();
+    const d = showDom(`
+      <div class="wide">
+        <div class="world-top">
+          <div>
+            <h1 class="big-title">แผนที่โลก</h1>
+            <p class="lead">ออกไปจับโปเกม่อน จัดทีม 6 ตัว แล้วลงด่านป้องกัน</p>
+          </div>
+          <div class="party-mini">
+            <div class="pm-label">ทีมตอนนี้ (${party.length}/6)</div>
+            <div class="pm-row">${party.length ? party.map(m =>
+              `<div class="pm-slot" data-tip-mon="${m.id}">${sprite(m.id)}<span>Lv${m.lv}</span></div>`).join('')
+              : '<div class="pm-empty">ยังไม่มีใครในทีม</div>'}</div>
+            <button class="nav" data-go="party">จัดทีม</button>
+          </div>
+        </div>
+
+        <h2 class="sec">ด่านแคมเปญ</h2>
+        <div class="loc-grid">${stages}</div>
+
+        <h2 class="sec">โซนซาฟารี — ออกไปจับโปเกม่อน</h2>
+        <div class="loc-grid">${zones}</div>
+
+        <h2 class="sec">เควสโปเกม่อนในตำนาน</h2>
+        <div class="loc-grid quests">${quests}</div>
+
+        <h2 class="sec">ร้านค้า</h2>
+        <div class="shop-row">
+          <button class="shopitem" data-buy="balls">
+            <div class="si-icon">⚪</div>
+            <div class="si-name">ลูกบอลซาฟารี ×10</div>
+            <div class="si-desc">ไว้จับโปเกม่อนในโซนซาฟารี</div>
+            <div class="si-price">₽${fmt(PTD.save.PRICES.balls)}</div>
+          </button>
+          <button class="shopitem" data-buy="candy">
+            <div class="si-icon">🍬</div>
+            <div class="si-name">ลูกอมพิเศษ</div>
+            <div class="si-desc">เพิ่มเลเวลถาวรให้ตัวที่เลือก</div>
+            <div class="si-price">ราคาตามเลเวล</div>
+          </button>
+          <button class="shopitem" data-buy="stone" ${PTD.save.stoneOptions().length ? '' : 'disabled'}>
+            <div class="si-icon">⚡</div>
+            <div class="si-name">หินเมก้า</div>
+            <div class="si-desc">${PTD.save.stoneOptions().length
+              ? 'ปลดล็อกเมก้าอีโวลูชันให้สายพันธุ์ที่มีอยู่'
+              : 'ยังไม่มีตัวที่เมก้าได้ในกล่อง'}</div>
+            <div class="si-price">₽${fmt(PTD.save.PRICES.stone)}</div>
+          </button>
+        </div>
+      </div>`);
+
+    bindTips(d);
+    d.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => app.go(b.dataset.go)));
+    d.querySelectorAll('[data-stage]').forEach(b =>
+      b.addEventListener('click', () => app.startStage(b.dataset.stage)));
+    d.querySelectorAll('[data-zone]').forEach(b =>
+      b.addEventListener('click', () => app.go('safari', b.dataset.zone)));
+    d.querySelectorAll('[data-quest]').forEach(b =>
+      b.addEventListener('click', () => app.startQuest(b.dataset.quest)));
+    d.querySelectorAll('[data-buy]').forEach(b =>
+      b.addEventListener('click', () => shopBuy(b.dataset.buy)));
   }
 
   /* ---------------- ร้านค้า ---------------- */
-  function buildShopChrome() {
-    const box = $('shopWrap');
-    box.innerHTML = `
-      <div class="side-h">เลือกโปเกม่อน <small id="shopCount"></small></div>
-      <div class="shopbar">
-        <input id="fText" type="search" placeholder="ค้นหาชื่อ / เลขโปเกเด็กซ์" autocomplete="off">
-        <select id="fType"></select>
-        <select id="fSort">
-          <option value="cost">เรียงตามราคา</option>
-          <option value="dex">เรียงตามเลขเด็กซ์</option>
-          <option value="bst">เรียงตามพลังรวม</option>
-          <option value="dps">เรียงตาม DPS</option>
-        </select>
-      </div>
-      <div id="shop"></div>
-      <button id="btnSlot" class="slotbtn"></button>`;
-
-    const sel = $('fType');
-    sel.innerHTML = '<option value="">ทุกธาตุ</option>' +
-      Object.keys(PTD.TYPE_TH).map(t => `<option value="${t}">${PTD.TYPE_TH[t]}</option>`).join('');
-
-    $('fText').addEventListener('input', (e) => { filter.text = e.target.value.trim().toLowerCase(); renderShop(); });
-    sel.addEventListener('change', (e) => { filter.type = e.target.value; renderShop(); });
-    $('fSort').addEventListener('change', (e) => { filter.sort = e.target.value; renderShop(); });
-    $('btnSlot').onclick = () => G.buySlot();
-  }
-
-  function renderShop() {
-    const shop = $('shop');
-    let list = shopIds.filter(id => {
-      const d = PTD.tower(id);
-      if (filter.type && !d.types.includes(filter.type)) return false;
-      if (filter.text) {
-        const q = filter.text;
-        if (!d.name.toLowerCase().includes(q) && !String(d.dexId).includes(q)
-            && !(d.jp || '').toLowerCase().includes(q)) return false;
-      }
-      return true;
-    });
-    const key = {
-      cost: (a, b) => PTD.tower(a).cost - PTD.tower(b).cost || a - b,
-      dex:  (a, b) => a - b,
-      bst:  (a, b) => PTD.tower(b).bst - PTD.tower(a).bst,
-      dps:  (a, b) => PTD.tower(b).dmg * PTD.tower(b).rate - PTD.tower(a).dmg * PTD.tower(a).rate
-    }[filter.sort];
-    list.sort(key);
-    visible = list;
-    PTD.ui.visibleIds = list;
-
-    $('shopCount').textContent = list.length + '/' + shopIds.length + ' ตัว';
-    shop.innerHTML = '';
-    const frag = document.createDocumentFragment();
-    list.forEach((id, i) => {
-      const def = PTD.tower(id);
-      const el = document.createElement('button');
-      el.className = 'card';
-      el.dataset.id = id;
-
-      const ic = document.createElement('div');
-      ic.className = 'card-icon';
-      ic.appendChild(spriteImg(id, 46));
-      if (i < 10) {
-        const k = document.createElement('span');
-        k.className = 'hotkey';
-        k.textContent = (i + 1) % 10;
-        ic.appendChild(k);
-      }
-      const nm = document.createElement('div');
-      nm.className = 'card-name';
-      nm.textContent = def.name;
-      const ty = document.createElement('div');
-      ty.className = 'card-types';
-      def.types.forEach(t => ty.appendChild(typeBadge(t)));
-      const co = document.createElement('div');
-      co.className = 'card-cost';
-      co.textContent = '₽' + def.cost;
-
-      el.append(ic, nm, ty, co);
-      el.addEventListener('click', () => {
-        PTD.audio.unlock();
-        G.placing = (G.placing === id) ? null : id;
-        G.selected = null;
-        refresh();
+  function shopBuy(kind) {
+    const s = PTD.save;
+    if (kind === 'balls') {
+      if (!s.buyBalls()) { toast('เงินไม่พอ'); PTD.sfx.deny(); return; }
+      PTD.sfx.place();
+      toast('ได้ลูกบอลมา 10 ลูก');
+      showWorld(); syncHud();
+      return;
+    }
+    if (kind === 'candy') {
+      const mons = s.data.box.filter(m => m.lv < PTD.MAX_LEVEL)
+        .sort((a, b) => (s.data.party.includes(b.uid) - s.data.party.includes(a.uid)) || b.lv - a.lv);
+      if (!mons.length) { toast('ทุกตัวเลเวลสูงสุดแล้ว'); return; }
+      pickerModal('เลือกตัวที่จะป้อนลูกอม', mons.map(m => ({
+        id: m.id, uid: m.uid,
+        label: `${PTD.tower(m.id).name} Lv.${m.lv} → ${m.lv + 1}`,
+        price: s.candyPrice(m.uid),
+        can: s.money >= s.candyPrice(m.uid),
+        tag: s.data.party.includes(m.uid) ? 'อยู่ในทีม' : ''
+      })), (opt) => {
+        if (!s.buyCandyFor(opt.uid)) { toast('เงินไม่พอ'); PTD.sfx.deny(); return false; }
+        PTD.sfx.levelUp();
+        toast(`${PTD.tower(opt.id).name} ขึ้นเป็น Lv.${s.mon(opt.uid).lv}`);
+        return true;
       });
-      el.addEventListener('mousemove', (ev) => showTip(towerTip(def), ev));
-      el.addEventListener('mouseleave', hideTip);
-      frag.appendChild(el);
-    });
-    shop.appendChild(frag);
-    markAffordable();
-  }
-
-  function markAffordable() {
-    const full = G.towers.length >= G.teamCap;
-    for (const el of $('shop').children) {
-      const id = Number(el.dataset.id);
-      el.classList.toggle('sel', G.placing === id);
-      el.classList.toggle('poor', G.money < PTD.tower(id).cost || full);
+      return;
+    }
+    if (kind === 'stone') {
+      const opts = s.stoneOptions();
+      if (!opts.length) { toast('ยังไม่มีตัวที่เมก้าได้ในกล่อง'); return; }
+      pickerModal('เลือกหินเมก้าที่จะซื้อ', opts.map(id => {
+        const m = PTD.megasOf(id)[0];
+        return { id, label: m.stone, sub: PTD.megasOf(id).map(x => x.n).join(' / '),
+                 price: s.PRICES.stone, can: s.money >= s.PRICES.stone, tag: '' };
+      }), (opt) => {
+        if (!s.buyStone(opt.id)) { toast('เงินไม่พอ'); PTD.sfx.deny(); return false; }
+        PTD.sfx.evolve();
+        toast('ได้หิน ' + opt.label + ' แล้ว');
+        return true;
+      });
     }
   }
 
-  function updateSlotBtn() {
-    const b = $('btnSlot');
-    if (!b) return;
-    if (G.extraSlots >= G.EXTRA_SLOTS) {
-      b.innerHTML = 'ขยายทีมเต็มที่แล้ว <small>' + G.teamCap + ' ตัว</small>';
-      b.disabled = true;
-    } else {
-      const c = G.slotCost();
-      b.innerHTML = `➕ ขยายทีมเป็น ${G.teamCap + 1} ตัว <small>₽${fmt(c)}</small>`;
-      b.disabled = G.money < c;
-    }
+  function pickerModal(title, options, onPick) {
+    const m = $('modal');
+    m.hidden = false;
+    hideTip();
+    m.innerHTML = `
+      <div class="enc-box picker">
+        <h3 class="pick-title">${title}</h3>
+        <div class="pick-list">${options.map((o, i) => `
+          <button class="pick" data-i="${i}" ${o.can ? '' : 'disabled'}>
+            ${sprite(o.id, 'big')}
+            <div class="pick-info">
+              <div class="pick-label">${o.label}</div>
+              ${o.sub ? `<div class="pick-sub">${o.sub}</div>` : ''}
+              ${o.tag ? `<div class="pick-tag">${o.tag}</div>` : ''}
+            </div>
+            <div class="pick-price">₽${fmt(o.price)}</div>
+          </button>`).join('')}</div>
+        <button class="ghost" id="pickClose">ปิด</button>
+      </div>`;
+    m.querySelectorAll('.pick').forEach(b => b.addEventListener('click', () => {
+      const ok = onPick(options[Number(b.dataset.i)]);
+      if (ok) { closeModal(); showWorld(); syncHud(); }
+    }));
+    $('pickClose').onclick = closeModal;
   }
 
-  /* ---------------- แผงข้อมูลป้อมที่เลือก ---------------- */
+  /* ---------------- จัดทีม ---------------- */
+  function showParty() {
+    const s = PTD.save;
+    const box = s.data.box;
+    const inParty = (uid) => s.data.party.includes(uid);
+
+    const card = (m) => {
+      const t = PTD.tower(m.id);
+      const mega = PTD.hasMega(m.id);
+      const stone = mega && s.hasStone(m.id);
+      return `<button class="mon ${inParty(m.uid) ? 'in' : ''}" data-uid="${m.uid}" data-tip-mon="${m.id}">
+        ${sprite(m.id)}
+        <div class="mon-name">${t.name}</div>
+        <div class="mon-lv">Lv.${m.lv}</div>
+        <div class="mon-types">${t.types.map(badge).join('')}</div>
+        ${stone ? '<div class="mon-mega">⚡ เมก้าพร้อม</div>'
+                : (mega ? '<div class="mon-mega dim">เมก้าได้ ถ้ามีหิน</div>' : '')}
+        ${inParty(m.uid) ? '<div class="mon-in">อยู่ในทีม</div>' : ''}
+      </button>`;
+    };
+
+    const party = s.partyMons();
+    const slots = [];
+    for (let i = 0; i < 6; i++) {
+      const m = party[i];
+      slots.push(m
+        ? `<div class="slot filled" data-tip-mon="${m.id}">${sprite(m.id)}
+             <div class="slot-name">${PTD.tower(m.id).name}</div>
+             <div class="slot-lv">Lv.${m.lv}</div>
+             <button class="slot-x" data-drop="${m.uid}">✕</button></div>`
+        : `<div class="slot"><span>ว่าง</span></div>`);
+    }
+
+    const d = showDom(`
+      <div class="wide">
+        <h1 class="big-title">จัดทีม</h1>
+        <p class="lead">พกลงด่านได้สูงสุด <b>6 ตัว</b> เหมือนกฎจริงของโปเกม่อน —
+          คลิกตัวในกล่องเพื่อเพิ่ม/เอาออก</p>
+        <div class="slots">${slots.join('')}</div>
+        <h2 class="sec">กล่องโปเกม่อน (${box.length} ตัว)</h2>
+        ${box.length ? `<div class="mon-grid">${box.slice().sort((a, b) =>
+            (inParty(b.uid) - inParty(a.uid)) || b.lv - a.lv || a.id - b.id).map(card).join('')}</div>`
+          : '<p class="empty">ยังไม่มีโปเกม่อนในกล่อง — ไปโซนซาฟารีเพื่อจับมาก่อน</p>'}
+      </div>`);
+
+    bindTips(d);
+    d.querySelectorAll('[data-uid]').forEach(b => b.addEventListener('click', () => {
+      const r = s.toggleParty(Number(b.dataset.uid));
+      if (r === 'full') { toast('ทีมเต็มแล้ว (6 ตัว) — เอาตัวอื่นออกก่อน'); return; }
+      PTD.sfx.place();
+      showParty(); syncHud();
+    }));
+    d.querySelectorAll('[data-drop]').forEach(b => b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      s.toggleParty(Number(b.dataset.drop));
+      PTD.sfx.sell();
+      showParty(); syncHud();
+    }));
+  }
+
+  /* ---------------- โปเกเด็กซ์ ---------------- */
+  function showDex() {
+    const s = PTD.save;
+    const cells = PTD.DEX.map(d => {
+      const caught = s.data.caught.includes(d.id);
+      const seen = caught || s.data.seen.includes(d.id);
+      return `<div class="dex-cell ${caught ? 'caught' : seen ? 'seen' : 'unknown'}"
+                ${seen ? `data-tip-mon="${d.id}"` : ''}>
+        ${sprite(d.id, seen ? '' : 'unknown')}
+        <div class="dex-no">${dexNo(d.id)}</div>
+        <div class="dex-name">${seen ? d.n : '???'}</div>
+      </div>`;
+    }).join('');
+    const d = showDom(`
+      <div class="wide">
+        <h1 class="big-title">โปเกเด็กซ์</h1>
+        <p class="lead">เจอแล้ว <b>${s.dexSeen}</b> · จับได้ <b>${s.dexCaught}</b> จาก 151 ตัว</p>
+        <div class="dex-grid">${cells}</div>
+      </div>`);
+    bindTips(d);
+  }
+
+  /* ---------------- แถบข้างตอนอยู่ในซาฟารี ---------------- */
+  function buildSafariSide() {
+    const S = PTD.safari.state;
+    const zone = S.zone;
+    const pool = PTD.safari.poolOf(zone);
+    const s = PTD.save;
+    $('side').innerHTML = `
+      <div class="panel">
+        <h3 class="side-h">${zone.name}</h3>
+        <p class="side-note">เดินบนหญ้าสูงเพื่อหาโปเกม่อน ใช้ลูกศร/WASD หรือคลิกช่องที่อยากไป</p>
+        <div class="kv"><span>ลูกบอลที่เหลือ</span><b id="ballsLeft">${s.balls}</b></div>
+        <div class="kv"><span>เลเวลที่เจอได้</span><b>${zone.lv[0]}–${zone.lv[1]}</b></div>
+        <div class="kv"><span>จับครบแล้ว</span><b>${pool.filter(i => s.data.caught.includes(i)).length}/${pool.length}</b></div>
+      </div>
+      <div class="panel">
+        <h3 class="side-h">พบได้ในโซนนี้</h3>
+        <div class="zone-list">${pool.map(id =>
+          `<div class="zl ${s.data.caught.includes(id) ? 'got' : ''}" data-tip-mon="${id}">
+            <img class="psprite tiny ${s.data.caught.includes(id) ? '' : 'unknown'}"
+                 src="${PTD.sprites.stillURL(id)}" alt="">
+            <span>${s.data.seen.includes(id) ? PTD.dex(id).n : '???'}</span>
+            ${s.data.caught.includes(id) ? '<b>✓</b>' : ''}
+          </div>`).join('')}</div>
+      </div>`;
+    bindTips($('side'));
+  }
+
+  /* ---------------- มินิเกมจับ ---------------- */
+  let encLog = [];
+  function showEncounter(enc) {
+    hideTip();
+    encLog = [];
+    renderEncounter(enc, `โปเกม่อนป่าโผล่ออกมา!`);
+  }
+
+  function renderEncounter(enc, text) {
+    if (text) { encLog.unshift(text); encLog = encLog.slice(0, 3); }
+    const d = PTD.dex(enc.id);
+    const t = PTD.tower(enc.id);
+    const chance = Math.round(PTD.safari.catchChance(enc) * 100);
+    const flee = Math.round(PTD.safari.fleeChance(enc) * 100);
+    const balls = PTD.save.balls;
+    const mood = enc.angry ? `โกรธ ×${enc.angry}` : enc.eating ? `กำลังกิน ×${enc.eating}` : 'ปกติ';
+
+    const m = $('modal');
+    m.hidden = false;
+    m.innerHTML = `
+      <div class="enc-box">
+        <div class="enc-top">
+          <img class="psprite enc-sprite" src="${PTD.sprites.stillURL(enc.id)}" alt="">
+          <div>
+            <div class="enc-name">${d.n} <span class="enc-lv">Lv.${enc.lv}</span></div>
+            <div class="enc-no">${dexNo(d.id)} · ${d.jp}</div>
+            <div class="enc-types">${t.types.map(badge).join('')}</div>
+            <div class="enc-mood">อารมณ์: <b>${mood}</b></div>
+          </div>
+        </div>
+        <div class="enc-odds">
+          <div class="odd good"><span>โอกาสจับ</span><b>${chance}%</b></div>
+          <div class="odd bad"><span>โอกาสหนี</span><b>${flee}%</b></div>
+          <div class="odd"><span>ลูกบอล</span><b>${balls}</b></div>
+        </div>
+        <div class="enc-log">${encLog.map(l => `<div>${l}</div>`).join('')}</div>
+        <div class="enc-acts">
+          <button data-act="ball" ${balls <= 0 ? 'disabled' : ''}>⚪ ขว้างบอล</button>
+          <button data-act="bait">🍎 โยนเหยื่อ<small>หนียาก แต่จับยาก</small></button>
+          <button data-act="rock">🪨 ขว้างก้อนหิน<small>จับง่าย แต่หนีง่าย</small></button>
+          <button data-act="run" class="ghost">หนี</button>
+        </div>
+      </div>`;
+    m.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
+      const res = PTD.safari.act(b.dataset.act);
+      if (!res) return;
+      if (res.result === 'caught') {
+        closeModal();
+        PTD.safari.say(res.text);
+        toast(`จับ ${PTD.dex(res.id).n} ได้แล้ว! (Lv.${res.lv})`);
+        buildSafariSide(); syncHud();
+      } else if (res.result === 'fled' || res.result === 'run') {
+        closeModal();
+        PTD.safari.say(res.text);
+        syncHud();
+      } else if (res.result === 'noball') {
+        toast('ลูกบอลหมดแล้ว — ผ่านด่านเพื่อรับเพิ่ม');
+      } else {
+        renderEncounter(PTD.safari.encounter, res.text);
+        syncHud();
+        const bl = $('ballsLeft');
+        if (bl) bl.textContent = PTD.save.balls;
+      }
+    }));
+  }
+
+  const modalOpen = () => !$('modal').hidden;
+  function closeModal() { hideTip(); $('modal').hidden = true; $('modal').innerHTML = ''; }
+
+  /* ---------------- แถบข้างตอนสู้ ---------------- */
+  function buildBattleSide() {
+    $('side').innerHTML = `<div id="rosterPanel" class="panel"></div>
+      <div id="detail" class="panel" hidden></div>
+      <div id="preview" class="panel"></div>
+      <div class="side-foot">
+        <kbd>1-6</kbd> เลือกตัวในทีม · <kbd>Esc</kbd> ยกเลิก · <kbd>Space</kbd> พัก ·
+        <kbd>X</kbd> เร่ง · <kbd>E</kbd> วิวัฒนาการ · <kbd>M</kbd> เมก้า ·
+        <kbd>C</kbd> ลูกอม · <kbd>R</kbd> เก็บกลับ
+      </div>`;
+    refresh();
+  }
+
+  function renderRoster() {
+    const B = PTD.battle;
+    const box = $('rosterPanel');
+    if (!box) return;
+    box.innerHTML = `<h3 class="side-h">ทีมของคุณ <small>${
+      B.roster.filter(s => s.placed).length}/${B.roster.length} ลงสนามแล้ว</small></h3>
+      <div class="roster">${B.roster.map((s, i) => {
+        const t = PTD.tower(s.mon.id);
+        const placed = s.placed;
+        return `<button class="rmon ${placed ? 'placed' : ''} ${B.placing === s.mon.uid ? 'sel' : ''}"
+                  data-uid="${s.mon.uid}" data-tip-mon="${s.mon.id}">
+          <span class="hotkey">${i + 1}</span>
+          ${sprite(s.mon.id)}
+          <div class="rmon-name">${t.name}</div>
+          <div class="rmon-lv">Lv.${placed && s.tower ? s.tower.level : s.mon.lv}</div>
+          ${placed ? '<div class="rmon-tag">ลงสนามแล้ว</div>' : ''}
+        </button>`;
+      }).join('')}</div>`;
+    box.querySelectorAll('[data-uid]').forEach(b => b.addEventListener('click', () => {
+      const uid = Number(b.dataset.uid);
+      const slot = B.slotOf(uid);
+      if (slot && slot.placed) { B.selected = slot.tower; B.placing = null; }
+      else { B.placing = B.placing === uid ? null : uid; B.selected = null; }
+      refresh();
+    }));
+    bindTips(box);
+  }
+
   function buildDetail(t) {
+    const B = PTD.battle;
     const d = $('detail');
     const def = t.def;
     const st = def.stats;
@@ -213,11 +605,11 @@
 
     d.innerHTML = `
       <div class="dt-head">
-        <div class="dt-icon"></div>
+        <div class="dt-icon">${sprite(def.dexId, 'big')}</div>
         <div class="dt-id">
           <div class="dt-name">${def.name} <span class="dt-lv">Lv.${t.level}</span></div>
-          <div class="dt-th">${dexNo(def.dexId)} · ${def.jp}</div>
-          <div class="dt-types"></div>
+          <div class="dt-th">${def.isMega ? 'ร่างเมก้า' : dexNo(def.dexId) + ' · ' + def.jp}</div>
+          <div class="dt-types">${def.types.map(badge).join('')}</div>
         </div>
         <button class="dt-close" title="ปิด (Esc)">✕</button>
       </div>
@@ -240,17 +632,41 @@
       <div class="dt-eff" id="dtEff"></div>
       <div class="dt-actions" id="dtActions"></div>`;
 
-    d.querySelector('.dt-icon').appendChild(spriteImg(def.dexId, 64, 'psprite big'));
-    const tw = d.querySelector('.dt-types');
-    def.types.forEach(x => tw.appendChild(typeBadge(x)));
-    d.querySelector('.dt-close').onclick = () => { G.selected = null; refresh(); };
+    d.querySelector('.dt-close').onclick = () => { B.selected = null; refresh(); };
     d.querySelectorAll('.mode').forEach(b => b.addEventListener('click', () => {
       t.targetMode = b.dataset.mode; refresh();
     }));
 
-    /* ---- ปุ่มวิวัฒนาการ (รองรับสายที่แตกกิ่ง เช่น Eevee) ---- */
     const acts = $('dtActions');
-    if (def.evolveTo.length) {
+
+    /* เมก้า */
+    const megas = B.megaOptions(t);
+    if (megas.length && !t.megaActive) {
+      const hasStone = PTD.save.hasStone(t.def.dexId);
+      for (const m of megas) {
+        const b = document.createElement('button');
+        b.className = 'big mega' + ((!hasStone || B.megaUsed) ? ' locked' : '');
+        b.innerHTML = hasStone
+          ? (B.megaUsed
+              ? `ใช้เมก้าไปแล้วในด่านนี้<small>ได้ครั้งเดียวต่อด่าน</small>`
+              : `<img class="psprite mini" src="${PTD.sprites.stillURL(m.form)}" alt="">` +
+                `⚡ ${m.n}<small>BST ${m.bst} · ${m.t.map(x => PTD.TYPE_TH[x]).join('/')}${
+                  megas.length === 1 ? ' · กด M' : ''}</small>`)
+          : `🔒 ${m.n}<small>ต้องมีหิน ${m.stone}</small>`;
+        b.disabled = !hasStone || B.megaUsed;
+        b.onclick = () => B.doMega(m.form);
+        acts.appendChild(b);
+      }
+    } else if (t.megaActive) {
+      const b = document.createElement('button');
+      b.className = 'big mega on';
+      b.innerHTML = 'อยู่ในร่างเมก้า<small>จบด่านจะกลับร่างเดิม</small>';
+      b.disabled = true;
+      acts.appendChild(b);
+    }
+
+    /* วิวัฒนาการ */
+    if (def.evolveTo.length && !t.megaActive) {
       const ready = t.level >= def.evolveLv;
       for (let i = 0; i < def.evolveTo.length; i++) {
         const nx = PTD.dex(def.evolveTo[i]);
@@ -260,216 +676,218 @@
           ? `<img class="psprite mini" src="${PTD.sprites.stillURL(nx.id)}" alt="">` +
             `วิวัฒนาการ → ${nx.n}<small>₽${def.evolveCost}${def.evolveTo.length === 1 ? ' · กด E' : ''}</small>`
           : `ต้องถึง Lv.${def.evolveLv}<small>ตอนนี้ Lv.${t.level} · ของจริงคือ${def.evoNote}</small>`;
-        b.disabled = !ready || G.money < def.evolveCost;
-        b.onclick = () => G.evolveSelected(i);
+        b.disabled = !ready || B.money < def.evolveCost;
+        b.onclick = () => B.evolveSelected(i);
         acts.appendChild(b);
-        if (!ready) break;      // ยังไม่ถึงเลเวล แสดงปุ่มเดียวพอ
+        if (!ready) break;
       }
-    } else {
-      const b = document.createElement('button');
-      b.className = 'big evolve locked';
-      b.innerHTML = 'ร่างสุดท้ายแล้ว<small>วิวัฒนาการครบสาย</small>';
-      b.disabled = true;
-      acts.appendChild(b);
     }
 
+    /* ลูกอม */
     const cd = document.createElement('button');
-    cd.className = 'big candy';
-    cd.id = 'btnCandy';
-    if (t.level >= PTD.MAX_LEVEL) { cd.innerHTML = `เลเวลสูงสุดแล้ว<small>Lv.${PTD.MAX_LEVEL}</small>`; cd.disabled = true; cd.classList.add('locked'); }
-    else {
-      const c = G.candyCost(t);
+    cd.className = 'big candy'; cd.id = 'btnCandy';
+    if (t.level >= PTD.MAX_LEVEL) {
+      cd.innerHTML = `เลเวลสูงสุดแล้ว<small>Lv.${PTD.MAX_LEVEL}</small>`;
+      cd.disabled = true; cd.classList.add('locked');
+    } else {
+      const c = B.candyCost(t);
       cd.innerHTML = `🍬 ลูกอมพิเศษ → Lv.${t.level + 1}<small>₽${fmt(c)} · กด C</small>`;
-      cd.disabled = G.money < c;
+      cd.disabled = B.money < c;
     }
-    cd.onclick = () => G.buyCandy();
+    cd.onclick = () => B.buyCandy();
     acts.appendChild(cd);
 
-    const sl = document.createElement('button');
-    sl.className = 'big sell';
-    sl.innerHTML = `ขาย +₽${fmt(t.sellValue)}<small>กด S</small>`;
-    sl.onclick = () => G.sellSelected();
-    acts.appendChild(sl);
+    /* เก็บกลับ */
+    const rc = document.createElement('button');
+    rc.className = 'big sell';
+    rc.innerHTML = 'เก็บกลับเข้าทีม<small>วางใหม่ได้ฟรี · กด R</small>';
+    rc.onclick = () => B.recall(t);
+    acts.appendChild(rc);
 
     updateEff(t);
   }
 
-  // ตารางว่าท่าของป้อมตัวนี้ได้เปรียบศัตรูในสนาม/เวฟถัดไปแค่ไหน
   function updateEff(t) {
+    const B = PTD.battle;
     const box = $('dtEff');
     if (!box) return;
     const seen = new Map();
-    const src = G.enemies.length ? G.enemies.map(e => e.def) : nextWaveDefs();
+    const src = B.enemies.length ? B.enemies.map(e => e.def) : nextWaveDefs();
     for (const def of src) if (!seen.has(def.dexId)) seen.set(def.dexId, def);
     if (!seen.size) { box.innerHTML = ''; return; }
-
     const rows = [...seen.values()].map(def => {
       const mult = PTD.effectiveness(t.def.moveType, def.types);
       return { def, mult, lab: PTD.effLabel(mult) };
     }).sort((a, b) => b.mult - a.mult).slice(0, 6);
-
-    box.innerHTML = `<div class="dt-label">ธาตุได้เปรียบ (${G.enemies.length ? 'ในสนาม' : 'เวฟถัดไป'})</div>` +
+    box.innerHTML = `<div class="dt-label">ธาตุได้เปรียบ (${B.enemies.length ? 'ในสนาม' : 'เวฟถัดไป'})</div>` +
       rows.map(r => `<div class="effrow ${r.lab.cls}">
-        <img class="psprite tiny" src="${PTD.sprites.stillURL(r.def.dexId)}" alt="">
+        ${sprite(r.def.dexId, 'tiny')}
         <span>${r.def.name}</span>
         <em>${r.def.types.map(x => PTD.TYPE_TH[x]).join('/')}</em>
         <b>${r.mult}x</b></div>`).join('');
   }
 
   function nextWaveDefs() {
-    const w = PTD.WAVES[Math.min(G.waveIndex, PTD.WAVES.length - 1)];
+    const B = PTD.battle;
+    const w = B.waves[Math.min(B.waveIndex, B.waves.length - 1)];
     return w ? w.groups.map(g => PTD.enemy(g.id, { boss: g.boss, bossX: g.bossX })) : [];
   }
 
-  /* ---------------- ตัวอย่างเวฟถัดไป ---------------- */
   function buildPreview() {
+    const B = PTD.battle;
     const box = $('preview');
-    if (G.state === 'wave') {
-      const left = G.spawnQueue.length + G.enemies.length;
-      box.innerHTML = `<div class="pv-head">กำลังสู้ — เวฟ ${G.waveIndex + 1}</div>
-        <div class="pv-left">เหลือศัตรู <b>${left}</b> ตัว</div>`;
+    if (!box) return;
+    if (B.state === 'wave') {
+      box.innerHTML = `<div class="pv-head">กำลังสู้ — เวฟ ${B.waveIndex + 1}</div>
+        <div class="pv-left">เหลือศัตรู <b>${B.spawnQueue.length + B.enemies.length}</b> ตัว</div>`;
       return;
     }
-    if (G.waveIndex >= PTD.WAVES.length) { box.innerHTML = ''; return; }
-    const w = PTD.WAVES[G.waveIndex];
-    box.innerHTML = `<div class="pv-head">เวฟถัดไป: ${G.waveIndex + 1}/${PTD.WAVES.length}</div>` +
+    if (B.waveIndex >= B.waves.length) { box.innerHTML = ''; return; }
+    const w = B.waves[B.waveIndex];
+    box.innerHTML = `<div class="pv-head">เวฟถัดไป: ${B.waveIndex + 1}/${B.waves.length}</div>` +
       w.groups.map(g => {
         const def = PTD.enemy(g.id, { boss: g.boss, bossX: g.bossX });
-        return `<div class="pv-row${g.boss ? ' boss' : ''}">
-          <img class="psprite tiny" src="${PTD.sprites.stillURL(g.id)}" alt="">
+        return `<div class="pv-row${g.boss ? ' boss' : ''}" data-tip-mon="${g.id}">
+          ${sprite(g.id, 'tiny')}
           <span class="pv-name">${def.name}${g.boss ? ' 👑' : ''}</span>
           <span class="pv-types">${def.types.map(t =>
             `<i class="tdot" style="background:${PTD.TYPE_COLOR[t]}" title="${PTD.TYPE_TH[t]}"></i>`).join('')}</span>
           <b>x${g.count}</b></div>`;
       }).join('');
+    bindTips(box);
   }
 
-  /* ---------------- HUD ---------------- */
   function refresh() {
-    const detail = $('detail'), shopWrap = $('shopWrap');
-    if (G.selected && G.towers.includes(G.selected)) {
-      detail.hidden = false; shopWrap.hidden = true;
-      buildDetail(G.selected);
-    } else {
-      G.selected = null;
-      detail.hidden = true; shopWrap.hidden = false;
-      markAffordable();
-      updateSlotBtn();
-    }
+    if (app.screen !== 'battle') return;
+    const B = PTD.battle;
+    renderRoster();
+    const detail = $('detail');
+    if (B.selected && B.towers.includes(B.selected)) {
+      detail.hidden = false;
+      buildDetail(B.selected);
+    } else { B.selected = null; detail.hidden = true; }
     buildPreview();
-    $('team').textContent = G.towers.length + '/' + G.teamCap;
 
     const b = $('btnWave');
-    if (G.state === 'wave') { b.disabled = true; b.textContent = 'กำลังสู้…'; }
-    else if (G.state === 'won' || G.state === 'lost') { b.disabled = true; b.textContent = 'จบเกม'; }
-    else b.disabled = false;
-    $('btnSpeed').textContent = G.speed + 'x';
-    $('btnPause').textContent = G.paused ? '▶' : '⏸';
-    $('btnSound').textContent = PTD.audio.enabled ? '🔊' : '🔇';
+    if (b) {
+      if (B.state === 'wave') { b.disabled = true; b.textContent = 'กำลังสู้…'; }
+      else if (B.state === 'won' || B.state === 'lost') { b.disabled = true; b.textContent = 'จบด่าน'; }
+      else { b.disabled = false; b.textContent = B.state === 'break' ? 'เรียกเวฟถัดไป' : 'เริ่มเวฟ 1 ▶'; }
+    }
+    const sp = $('btnSpeed'); if (sp) sp.textContent = B.speed + 'x';
   }
 
-  let lastMoney = -1, lastLives = -1, lastWave = -1, lastState = '', lastEffAt = 0, lastTeam = -1;
+  let lastMoney = -1, lastLives = -1, lastWave = -1, lastState = '', lastEffAt = 0, lastPlaced = -1;
   function tick() {
-    if (G.money !== lastMoney) {
-      lastMoney = G.money;
-      $('money').textContent = fmt(G.money);
-      if (!$('detail').hidden) {
-        const t = G.selected;
-        const cd = $('btnCandy');
-        if (cd && t && t.level < PTD.MAX_LEVEL) cd.disabled = G.money < G.candyCost(t);
-        if (t && t.def.evolveTo.length && t.level >= t.def.evolveLv) {
-          for (const b of $('dtActions').querySelectorAll('.evolve'))
-            b.disabled = G.money < t.def.evolveCost;
-        }
-      } else { markAffordable(); updateSlotBtn(); }
+    const B = PTD.battle;
+    if (B.money !== lastMoney) {
+      lastMoney = B.money;
+      const el = $('money'); if (el) el.textContent = fmt(B.money);
+      if (!$('detail').hidden && B.selected) {
+        const t = B.selected, cd = $('btnCandy');
+        if (cd && t.level < PTD.MAX_LEVEL) cd.disabled = B.money < B.candyCost(t);
+        for (const x of $('dtActions').querySelectorAll('.evolve'))
+          if (!x.classList.contains('locked')) x.disabled = B.money < t.def.evolveCost;
+      }
     }
-    if (G.lives !== lastLives) {
-      lastLives = G.lives;
+    if (B.lives !== lastLives) {
+      lastLives = B.lives;
       const el = $('lives');
-      el.textContent = G.lives;
-      el.classList.toggle('danger', G.lives <= 5);
+      if (el) { el.textContent = B.lives; el.classList.toggle('danger', B.lives <= 5); }
     }
-    if (G.towers.length !== lastTeam) {
-      lastTeam = G.towers.length;
-      const el = $('team');
-      el.textContent = lastTeam + '/' + G.teamCap;
-      el.parentElement.classList.toggle('full', lastTeam >= G.teamCap);
-      if ($('detail').hidden) markAffordable();
+    if (B.waveIndex !== lastWave) {
+      lastWave = B.waveIndex;
+      const el = $('wave');
+      if (el) el.textContent = Math.min(B.waveIndex + 1, B.waves.length) + '/' + B.waves.length;
     }
-    if (G.waveIndex !== lastWave) {
-      lastWave = G.waveIndex;
-      $('wave').textContent = Math.min(G.waveIndex + 1, PTD.WAVES.length) + '/' + PTD.WAVES.length;
-    }
-    if (G.state !== lastState) { lastState = G.state; buildPreview(); }
+    if (B.state !== lastState) { lastState = B.state; buildPreview(); refresh(); }
+    const placed = B.towers.length;
+    if (placed !== lastPlaced) { lastPlaced = placed; renderRoster(); }
 
-    const b = $('btnWave');
-    if (G.state === 'break') {
-      b.textContent = `เรียกเวฟ ${G.waveIndex + 1} เลย (+₽${Math.ceil(G.breakLeft * 6)}) · ${G.breakLeft.toFixed(1)}วิ`;
-    } else if (G.state === 'ready') b.textContent = 'เริ่มเวฟ 1 ▶';
-
-    if (G.state === 'wave') {
+    const bw = $('btnWave');
+    if (bw && B.state === 'break') {
+      bw.textContent = `เรียกเวฟ ${B.waveIndex + 1} (+₽${Math.ceil(B.breakLeft * 6)}) · ${B.breakLeft.toFixed(1)}วิ`;
+    }
+    if (B.state === 'wave') {
       const el = $('preview').querySelector('.pv-left');
-      if (el) el.innerHTML = `เหลือศัตรู <b>${G.spawnQueue.length + G.enemies.length}</b> ตัว`;
+      if (el) el.innerHTML = `เหลือศัตรู <b>${B.spawnQueue.length + B.enemies.length}</b> ตัว`;
     }
-
-    if (G.selected) {
-      const t = G.selected, f = $('expfill'), tx = $('exptext');
+    if (B.selected) {
+      const t = B.selected, f = $('expfill'), tx = $('exptext');
       if (f) {
         f.style.width = (Math.min(1, t.exp / t.expNext) * 100).toFixed(1) + '%';
         tx.textContent = t.level >= PTD.MAX_LEVEL ? 'MAX' : `EXP ${Math.floor(t.exp)}/${t.expNext}`;
       }
-      if (G.time - lastEffAt > 0.8) { lastEffAt = G.time; updateEff(t); }
+      if (B.time - lastEffAt > .8) { lastEffAt = B.time; updateEff(t); }
     }
   }
 
-  /* ---------------- จอจบเกม ---------------- */
-  function showEnd(won) {
+  /* ---------------- จอจบด่าน ---------------- */
+  function showEnd(result) {
+    const B = PTD.battle;
     const o = $('endscreen');
     o.hidden = false;
-    o.className = won ? 'win' : 'lose';
-    const caught = new Set(G.towers.map(t => t.def.dexId)).size;
+    o.className = result.won ? 'win' : 'lose';
+    const title = result.won
+      ? (result.mode === 'quest' ? '✨ จับได้แล้ว!' : '🏆 ผ่านด่าน!')
+      : (result.mode === 'quest' ? '💨 มันหนีไปแล้ว' : '💀 ป้อมแตก!');
+    const sub = result.won
+      ? (result.mode === 'quest'
+          ? `${PTD.dex(result.caught).n} เข้าร่วมทีมของคุณแล้ว (Lv.40)`
+          : `${B.stage.name} — เคลียร์ครบ ${B.waves.length} เวฟ`)
+      : (result.mode === 'quest'
+          ? `กดเลือดได้ต่ำสุด ${Math.round(B.questBest * 100)}% — ต้องต่ำกว่า ${Math.round(B.quest.threshold * 100)}%`
+          : `ไปได้ถึงเวฟ ${B.waveIndex + 1} จาก ${B.waves.length}`);
+
     o.innerHTML = `
       <div class="end-box">
-        <h2>${won ? '🏆 คุณคือแชมป์เปี้ยน!' : '💀 ป้อมแตก!'}</h2>
-        <p>${won ? 'ผ่านครบทั้ง ' + PTD.WAVES.length + ' เวฟ รวมถึง Mewtwo'
-                 : 'ไปได้ถึงเวฟ ' + (G.waveIndex + 1) + ' จาก ' + PTD.WAVES.length}</p>
+        <h2>${title}</h2>
+        <p>${sub}</p>
+        ${result.caught ? `<div class="end-catch">${sprite(result.caught, 'huge')}</div>` : ''}
         <div class="end-stats">
-          <div><span>ศัตรูที่ปราบ</span><b>${fmt(G.stats.kills)}</b></div>
-          <div><span>ดาเมจรวม</span><b>${fmt(G.stats.damage)}</b></div>
-          <div><span>เงินที่หาได้</span><b>₽${fmt(G.stats.earned)}</b></div>
-          <div><span>หลุดเข้าฐาน</span><b>${G.stats.leaked}</b></div>
-          <div><span>ทีมสุดท้าย</span><b>${caught} ตัว</b></div>
-          <div><span>หัวใจที่เหลือ</span><b>${G.lives}</b></div>
+          <div><span>ศัตรูที่ปราบ</span><b>${fmt(B.stats.kills)}</b></div>
+          <div><span>ดาเมจรวม</span><b>${fmt(B.stats.damage)}</b></div>
+          <div><span>เงินที่ได้รับ</span><b>₽${fmt(result.money)}</b></div>
+          <div><span>ลูกบอลที่ได้</span><b>${result.balls}</b></div>
+          <div><span>หลุดเข้าฐาน</span><b>${B.stats.leaked}</b></div>
+          <div><span>หัวใจที่เหลือ</span><b>${B.lives}</b></div>
         </div>
-        <div class="end-team">${G.towers.map(t =>
-          `<img class="psprite" src="${PTD.sprites.stillURL(t.def.dexId)}" title="${t.def.name} Lv.${t.level}" alt="">`).join('')}</div>
-        <button id="btnAgain">เล่นอีกครั้ง</button>
+        ${result.stone ? `<div class="end-stone">⚡ ได้หิน ${PTD.megasOf(result.stone)[0].stone} —
+          ใช้เมก้าอีโวลูชัน ${PTD.dex(result.stone).n} ได้แล้ว</div>` : ''}
+        <div class="end-team">${B.towers.map(t =>
+          `<div class="et"><img class="psprite" src="${PTD.sprites.stillURL(t.def.dexId)}" alt="">
+            <span>Lv.${t.level}</span></div>`).join('')}</div>
+        <div class="end-acts">
+          <button id="btnBackWorld" class="primary">กลับแผนที่โลก</button>
+          <button id="btnRetry">เล่นด่านนี้อีกครั้ง</button>
+        </div>
       </div>`;
-    $('btnAgain').onclick = () => G.reset();
+    $('btnBackWorld').onclick = () => app.go('world');
+    $('btnRetry').onclick = () => app.go('battle',
+      B.mode === 'quest' ? { quest: B.quest } : { stage: B.stage });
   }
-  function hideEnd() { $('endscreen').hidden = true; }
+
+  /* ---------------- toast ---------------- */
+  let toastT = null;
+  function toast(msg) {
+    const el = $('toast');
+    el.textContent = msg;
+    el.classList.add('on');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => el.classList.remove('on'), 2600);
+  }
 
   /* ---------------- init ---------------- */
-  function init(game) {
-    G = game;
-    shopIds = PTD.shopList();
-    buildShopChrome();
-    renderShop();
-
-    $('btnWave').onclick = () => { PTD.audio.unlock(); G.startWave(); };
-    $('btnSpeed').onclick = () => { G.speed = G.speed === 1 ? 2 : (G.speed === 2 ? 3 : 1); refresh(); };
-    $('btnPause').onclick = () => { G.paused = !G.paused; refresh(); };
-    $('btnSound').onclick = () => { PTD.audio.toggle(); refresh(); };
-    $('btnRestart').onclick = () => { if (confirm('เริ่มเกมใหม่ทั้งหมด?')) G.reset(); };
-    $('btnHelp').onclick = () => { $('help').hidden = !$('help').hidden; };
+  function init(a) {
+    app = a;
     $('help').addEventListener('click', (e) => { if (e.target.id === 'help') $('help').hidden = true; });
-
-    // โหลดสไปรท์ของเวฟแรก ๆ ไว้ล่วงหน้า จะได้ไม่เห็นลูกบอลตอนเริ่มเล่น
-    const warm = new Set();
-    for (let i = 0; i < 3 && i < PTD.WAVES.length; i++)
-      for (const g of PTD.WAVES[i].groups) warm.add(g.id);
-    PTD.sprites.preload([...warm]);
+    const close = $('helpClose');
+    if (close) close.onclick = () => { $('help').hidden = true; };
   }
 
-  PTD.ui = { init, refresh, tick, showEnd, hideEnd, renderShop, visibleIds: [] };
+  PTD.ui = {
+    init, syncHud, showWorld, showParty, showDex, showStarter, showCanvas,
+    refresh, tick, showEnd, showEncounter, closeModal, modalOpen, toast,
+    buildSafariSide
+  };
 })(window.PTD = window.PTD || {});

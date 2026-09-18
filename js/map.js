@@ -7,22 +7,48 @@
   const TILE = 48, COLS = 20, ROWS = 12;
   const W = TILE * COLS, H = TILE * ROWS;
 
-  // จุดหักเลี้ยวของเส้นทาง (พิกัดช่อง) — เริ่มนอกจอซ้าย จบนอกจอขวา
-  const WAYPOINTS_T = [
-    [-1, 5], [4, 5], [4, 2], [10, 2], [10, 8], [15, 8], [15, 3], [18, 3], [18, 10], [20, 10]
-  ];
+  /* แผนที่ทั้งหมดในเกม — แต่ละอันมีเส้นทางและโทนสีของตัวเอง
+   * เพิ่มแผนที่ใหม่ = เพิ่มหนึ่งก้อนตรงนี้ ที่เหลือคำนวณให้เอง */
+  const LAYOUTS = {
+    meadow: {
+      name: 'ทุ่งหญ้า',
+      waypoints: [[-1, 5], [4, 5], [4, 2], [10, 2], [10, 8], [15, 8], [15, 3], [18, 3], [18, 10], [20, 10]],
+      grass: ['#5fa845', '#69b34c', '#74bd55'], dirt: ['#8a6a42', '#c2a06a', '#cfb17e'],
+      decor: 'forest', seed: 20250918
+    },
+    canyon: {
+      name: 'หุบเขา',
+      waypoints: [[-1, 1], [16, 1], [16, 5], [3, 5], [3, 9], [17, 9], [17, 6], [20, 6]],
+      grass: ['#8a6a5a', '#947264', '#9e7c6c'], dirt: ['#5e4636', '#a8825e', '#b89070'],
+      decor: 'rock', seed: 776611
+    },
+    shore: {
+      name: 'ชายฝั่ง',
+      waypoints: [[-1, 10], [3, 10], [3, 6], [7, 6], [7, 10], [12, 10], [12, 3], [7, 3],
+                  [7, 1], [17, 1], [17, 7], [20, 7]],
+      grass: ['#4f9a6a', '#58a575', '#63b080'], dirt: ['#7a6a4a', '#d4c08a', '#e0ce9c'],
+      decor: 'mixed', seed: 31337
+    }
+  };
+
+  let ACTIVE = 'meadow';
+  let WAYPOINTS_T = LAYOUTS[ACTIVE].waypoints;
 
   const t2p = ([c, r]) => ({ x: c * TILE + TILE / 2, y: r * TILE + TILE / 2 });
-  const WAYPOINTS = WAYPOINTS_T.map(t2p);
-
-  // ความยาวสะสมของเส้นทาง ใช้เรียงว่าใครนำหน้าใคร
-  const SEGS = [];
+  let WAYPOINTS = [];
+  let SEGS = [];
   let PATH_LEN = 0;
-  for (let i = 0; i < WAYPOINTS.length - 1; i++) {
-    const a = WAYPOINTS[i], b = WAYPOINTS[i + 1];
-    const len = Math.hypot(b.x - a.x, b.y - a.y);
-    SEGS.push({ a, b, len, start: PATH_LEN });
-    PATH_LEN += len;
+
+  function buildPath() {
+    WAYPOINTS = WAYPOINTS_T.map(t2p);
+    SEGS = [];
+    PATH_LEN = 0;
+    for (let i = 0; i < WAYPOINTS.length - 1; i++) {
+      const a = WAYPOINTS[i], b = WAYPOINTS[i + 1];
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      SEGS.push({ a, b, len, start: PATH_LEN });
+      PATH_LEN += len;
+    }
   }
 
   // แปลงระยะทางที่เดินมาแล้ว -> พิกัด + ทิศ
@@ -48,6 +74,7 @@
   for (let r = 0; r < ROWS; r++) { blocked[r] = new Array(COLS).fill(0); }
 
   function markPath() {
+    for (let r = 0; r < ROWS; r++) blocked[r].fill(0);
     for (let i = 0; i < WAYPOINTS_T.length - 1; i++) {
       let [c0, r0] = WAYPOINTS_T[i];
       const [c1, r1] = WAYPOINTS_T[i + 1];
@@ -60,22 +87,27 @@
     }
     // กันช่องที่ติดกับทางเดินแบบทแยง ไม่ต้องทำอะไร — วางได้หมด
   }
-  markPath();
 
   /* ---------- สุ่มของตกแต่งแบบคงที่ (seeded) ---------- */
   let seed = 20250918;
   function rnd() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
 
-  const decor = [];
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      if (blocked[r][c] !== 0) continue;
-      const v = rnd();
-      if (v < 0.075) {
-        blocked[r][c] = 2;
-        decor.push({ c, r, kind: v < 0.045 ? 'tree' : 'rock', j: rnd() });
-      } else if (v < 0.14) {
-        decor.push({ c, r, kind: 'flower', j: rnd() });   // ดอกไม้ไม่ขวางทาง
+  let decor = [];
+  function buildDecor(layout) {
+    seed = layout.seed;
+    decor = [];
+    const kinds = layout.decor === 'rock' ? ['rock', 'rock']
+                : layout.decor === 'mixed' ? ['tree', 'rock'] : ['tree', 'rock'];
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (blocked[r][c] !== 0) continue;
+        const v = rnd();
+        if (v < 0.075) {
+          blocked[r][c] = 2;
+          decor.push({ c, r, kind: v < 0.045 ? kinds[0] : kinds[1], j: rnd() });
+        } else if (v < 0.14) {
+          decor.push({ c, r, kind: 'flower', j: rnd() });   // ดอกไม้ไม่ขวางทาง
+        }
       }
     }
   }
@@ -85,7 +117,8 @@
   }
 
   /* ---------- วาดฉากลงแคนวาสสำรองครั้งเดียว ---------- */
-  function renderTerrain() {
+  function renderTerrain(layout) {
+    layout = layout || LAYOUTS[ACTIVE];
     const cv = document.createElement('canvas');
     cv.width = W; cv.height = H;
     const g = cv.getContext('2d');
@@ -95,8 +128,8 @@
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const v = rnd();
-        const base = (r + c) % 2 ? '#5fa845' : '#69b34c';
-        g.fillStyle = v < .12 ? '#74bd55' : base;
+        const base = (r + c) % 2 ? layout.grass[0] : layout.grass[1];
+        g.fillStyle = v < .12 ? layout.grass[2] : base;
         g.fillRect(c * TILE, r * TILE, TILE, TILE);
       }
     }
@@ -117,9 +150,9 @@
       g.lineWidth = w; g.lineCap = 'round'; g.lineJoin = 'round';
       g.strokeStyle = color; g.stroke();
     };
-    stroke(TILE * 0.96, '#8a6a42');
-    stroke(TILE * 0.80, '#c2a06a');
-    stroke(TILE * 0.62, '#cfb17e');
+    stroke(TILE * 0.96, layout.dirt[0]);
+    stroke(TILE * 0.80, layout.dirt[1]);
+    stroke(TILE * 0.62, layout.dirt[2]);
 
     // กรวดบนทาง
     g.globalAlpha = .35;
@@ -193,10 +226,32 @@
     return cv;
   }
 
-  PTD.map = {
+  const map = {
     TILE, COLS, ROWS, W, H,
-    WAYPOINTS, PATH_LEN, pointAt, buildable, blocked, renderTerrain,
+    id: ACTIVE, name: '', WAYPOINTS, PATH_LEN, terrain: null,
+    pointAt, buildable, blocked, renderTerrain,
     tileOf: (x, y) => ({ c: Math.floor(x / TILE), r: Math.floor(y / TILE) }),
     centerOf: (c, r) => ({ x: c * TILE + TILE / 2, y: r * TILE + TILE / 2 })
   };
+
+  // สลับแผนที่โดยเขียนทับค่าในอ็อบเจ็กต์เดิม ไม่สร้างใหม่
+  // (โมดูลอื่นถือ reference นี้ไว้ตั้งแต่ตอนโหลดแล้ว)
+  function use(id) {
+    const layout = LAYOUTS[id] || LAYOUTS.meadow;
+    ACTIVE = LAYOUTS[id] ? id : 'meadow';
+    WAYPOINTS_T = layout.waypoints;
+    buildPath();
+    markPath();
+    buildDecor(layout);
+    map.id = ACTIVE;
+    map.name = layout.name;
+    map.WAYPOINTS = WAYPOINTS;
+    map.PATH_LEN = PATH_LEN;
+    map.terrain = renderTerrain(layout);
+    return map;
+  }
+
+  PTD.map = map;
+  PTD.MAP_LAYOUTS = LAYOUTS;
+  PTD.useMap = use;
 })(window.PTD = window.PTD || {});

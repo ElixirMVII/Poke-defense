@@ -50,6 +50,20 @@ const trigName = new Map(triggers.map(t => [t.id, t.identifier]));
 
 const STAT = { '1': 'hp', '2': 'atk', '3': 'def', '4': 'spa', '5': 'spd', '6': 'spe' };
 
+// ร่างเมก้าทางการของสายพันธุ์ Gen 1 เท่านั้น (15 ร่างจาก 13 สายพันธุ์)
+// PokeAPI มีร่างเมก้าอื่นปนมาด้วย (Raichu, Clefable, Starmie, Dragonite) ซึ่งไม่ใช่ของ Game Freak
+const OFFICIAL_MEGA = new Set([
+  '10033', '10034', '10035', '10036', '10037', '10038', '10039',
+  '10040', '10041', '10042', '10043', '10044', '10071', '10073', '10090'
+]);
+// ชื่อหินเมก้าประจำแต่ละสายพันธุ์
+const STONE = {
+  3: 'Venusaurite', 6: 'Charizardite', 9: 'Blastoisinite', 15: 'Beedrillite',
+  18: 'Pidgeotite', 65: 'Alakazite', 80: 'Slowbronite', 94: 'Gengarite',
+  115: 'Kangaskhanite', 127: 'Pinsirite', 130: 'Gyaradosite',
+  142: 'Aerodactylite', 150: 'Mewtwonite'
+};
+
 /* ---------- เก็บเฉพาะ Gen 1 (species id 1-151) ---------- */
 const gen1 = species.filter(s => Number(s.id) <= 151 && s.generation_id === '1');
 
@@ -62,7 +76,7 @@ for (const p of pokemon) {
 const statsBy = new Map();
 for (const r of pStats) {
   const key = r.pokemon_id;
-  if (Number(key) > 151) continue;
+  if (Number(key) > 151 && !OFFICIAL_MEGA.has(key)) continue;
   const slot = STAT[r.stat_id];
   if (!slot) continue;
   if (!statsBy.has(key)) statsBy.set(key, {});
@@ -71,7 +85,7 @@ for (const r of pStats) {
 
 const typesBy = new Map();
 for (const r of pTypes) {
-  if (Number(r.pokemon_id) > 151) continue;
+  if (Number(r.pokemon_id) > 151 && !OFFICIAL_MEGA.has(r.pokemon_id)) continue;
   if (!typesBy.has(r.pokemon_id)) typesBy.set(r.pokemon_id, []);
   typesBy.get(r.pokemon_id)[Number(r.slot) - 1] = typeName.get(r.type_id);
 }
@@ -106,6 +120,8 @@ for (const s of gen1) {
   const bst = st.hp + st.atk + st.def + st.spa + st.spd + st.spe;
   dex.push({
     id: Number(id),
+    capture: Number(s.capture_rate),
+    habitat: Number(s.habitat_id || 0),
     name: cap(s.identifier).replace(/-m$/, '♂').replace(/-f$/, '♀'),
     jp: roomaji.get(id) || '',
     types: ty,
@@ -129,8 +145,40 @@ const lines = dex.map(d => {
   const evoStr = e ? `{t:'${e.trigger}'${e.minLevel ? ',lv:' + e.minLevel : ''}}` : 'null';
   return `  {id:${d.id},n:'${d.name}',jp:'${d.jp}',t:[${d.types.map(x => `'${x}'`).join(',')}],` +
          `s:[${d.stats.hp},${d.stats.atk},${d.stats.def},${d.stats.spa},${d.stats.spd},${d.stats.spe}],` +
-         `bst:${d.bst},from:${d.from || 0},to:[${d.to.join(',')}],lg:${d.legendary ? 1 : 0},evo:${evoStr}}`;
+         `bst:${d.bst},from:${d.from || 0},to:[${d.to.join(',')}],lg:${d.legendary ? 1 : 0},` +
+         `cr:${d.capture},hb:${d.habitat},evo:${evoStr}}`;
 });
+
+/* ---------- ร่างเมก้า ---------- */
+const megas = [];
+for (const p of pokemon) {
+  if (!OFFICIAL_MEGA.has(p.id)) continue;
+  const st = statsBy.get(p.id);
+  const ty = (typesBy.get(p.id) || []).filter(Boolean);
+  if (!st || !ty.length) { console.warn('ร่างเมก้าข้อมูลไม่ครบ:', p.identifier); continue; }
+  const sp = Number(p.species_id);
+  // charizard-mega-x -> 'X', mewtwo-mega-y -> 'Y', venusaur-mega -> ''
+  const m = p.identifier.match(/-mega(?:-([xy]))?$/);
+  const variant = m && m[1] ? m[1].toUpperCase() : '';
+  const base = byId.get(sp);
+  megas.push({
+    form: Number(p.id),
+    of: sp,
+    name: 'Mega ' + (base ? base.name : cap(p.identifier)) + (variant ? ' ' + variant : ''),
+    variant,
+    types: ty,
+    stats: st,
+    bst: st.hp + st.atk + st.def + st.spa + st.spd + st.spe,
+    stone: STONE[sp] || 'Mega Stone'
+  });
+}
+megas.sort((a, b) => a.of - b.of || a.variant.localeCompare(b.variant));
+
+const megaLines = megas.map(m =>
+  `  {form:${m.form},of:${m.of},n:'${m.name}',v:'${m.variant}',` +
+  `t:[${m.types.map(x => `'${x}'`).join(',')}],` +
+  `s:[${m.stats.hp},${m.stats.atk},${m.stats.def},${m.stats.spa},${m.stats.spd},${m.stats.spe}],` +
+  `bst:${m.bst},stone:'${m.stone}'}`);
 
 const out = `/* =====================================================================
  * gen1.js — โปเกม่อน Gen 1 ครบ 151 ตัว (สร้างอัตโนมัติ ห้ามแก้มือ)
@@ -149,10 +197,25 @@ const out = `/* ================================================================
 ${lines.join(',\n')}
   ];
 
+  /* ร่างเมก้า: form=id ของสไปรท์, of=สายพันธุ์เจ้าของ, v=รุ่น X/Y, stone=ชื่อหิน */
+  const MEGA = [
+${megaLines.join(',\n')}
+  ];
+
   const BY_ID = new Map(DEX.map(d => [d.id, d]));
+  const MEGA_BY_SPECIES = new Map();
+  for (const m of MEGA) {
+    if (!MEGA_BY_SPECIES.has(m.of)) MEGA_BY_SPECIES.set(m.of, []);
+    MEGA_BY_SPECIES.get(m.of).push(m);
+  }
 
   PTD.DEX = DEX;
+  PTD.MEGA = MEGA;
   PTD.dex = (id) => BY_ID.get(id);
+  // คืนรายชื่อร่างเมก้าของสายพันธุ์นั้น (Charizard กับ Mewtwo มีสองร่าง)
+  PTD.megasOf = (speciesId) => MEGA_BY_SPECIES.get(speciesId) || [];
+  PTD.hasMega = (speciesId) => MEGA_BY_SPECIES.has(speciesId);
+  PTD.MEGA_SPECIES = [...MEGA_BY_SPECIES.keys()];
   // ร่างเริ่มต้นของสาย = ตัวที่ไม่มีร่างก่อนหน้า
   PTD.BASE_FORMS = DEX.filter(d => !d.from).map(d => d.id);
   // ไล่สายวิวัฒนาการจาก id ที่ให้มาไปจนสุด (เลือกกิ่งแรกเสมอ)
@@ -168,7 +231,11 @@ ${lines.join(',\n')}
 fs.writeFileSync(path.join(__dirname, '..', 'js', 'gen1.js'), out);
 
 /* ---------- รายงาน ---------- */
-console.log('เขียน js/gen1.js แล้ว:', dex.length, 'ตัว');
+console.log('เขียน js/gen1.js แล้ว:', dex.length, 'ตัว +', megas.length, 'ร่างเมก้า');
+console.log('เมก้า:', megas.map(m => m.name).join(', '));
+const habCount = {};
+for (const d of dex) habCount[d.habitat] = (habCount[d.habitat] || 0) + 1;
+console.log('จำนวนตามถิ่นอาศัย:', JSON.stringify(habCount));
 console.log('ร่างเริ่มต้น (ซื้อได้):', dex.filter(d => !d.from).length);
 console.log('ในตำนาน:', dex.filter(d => d.legendary).map(d => d.name).join(', '));
 console.log('สายที่แตกกิ่ง:', dex.filter(d => d.to.length > 1)

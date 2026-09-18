@@ -272,12 +272,17 @@
   function expNeeded(level) { return Math.round(EXP_BASE * Math.pow(level, 1.45)); }
 
   class Tower {
-    constructor(defId, c, r, G) {
+    // mon = ข้อมูลตัวที่จับมาได้จากกล่อง (uid/เลเวล/exp) — ไม่ใส่ก็ถือว่าเป็นตัวใหม่
+    constructor(defId, c, r, G, mon) {
       this.def = PTD.tower(defId);
+      this.baseDef = this.def;        // ร่างก่อนเมก้า ไว้คืนร่างตอนจบด่าน
+      this.megaActive = false;
+      this.uid = mon ? mon.uid : 0;
       this.c = c; this.r = r;
       const p = M.centerOf(c, r);
       this.x = p.x; this.y = p.y;
-      this.level = 1; this.exp = 0;
+      this.level = mon ? (mon.lv || 1) : 1;
+      this.exp = mon ? (mon.exp || 0) : 0;
       this.cd = 0;
       this.kills = 0; this.damageDealt = 0;
       this.invested = this.def.cost;
@@ -315,6 +320,31 @@
     }
 
     // choice = index ของร่างที่เลือก (Eevee มีสามทาง)
+    /* ---------- เมก้าอีโวลูชัน ---------- */
+    // ไม่ใช่การบวกเปอร์เซ็นต์ แต่สลับไปใช้สเตตัสจริงของร่างเมก้าทั้งชุด
+    megaEvolve(formId) {
+      const m = PTD.megaTower(formId);
+      if (!m) return false;
+      this.baseDef = this.def;
+      this.def = m;
+      this.megaActive = true;
+      const G = this.G;
+      for (let i = 0; i < 40; i++) {
+        const a = Math.random() * TAU, sp = 90 + Math.random() * 140;
+        G.fx.push(new Particle(this.x, this.y, Math.cos(a) * sp, Math.sin(a) * sp,
+          i % 2 ? '#b98aff' : '#fff6c0', 4, .8, 30));
+      }
+      G.fx.push(new FloatText(this.x, this.y - 34, m.name + '!', '#c9a0ff', 16));
+      PTD.sfx.evolve();
+      return true;
+    }
+
+    megaRevert() {
+      if (!this.megaActive) return;
+      this.def = this.baseDef;
+      this.megaActive = false;
+    }
+
     evolve(choice) {
       const nextId = this.def.evolveTo[choice || 0];
       const next = PTD.tower(nextId);
@@ -506,6 +536,17 @@
         ctx.restore();
       }
 
+      if (this.megaActive) {
+        ctx.save();
+        ctx.globalAlpha = .55 + .25 * Math.sin(t * 4);
+        ctx.strokeStyle = '#c9a0ff'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(this.x, this.y + 2, 24, 0, TAU); ctx.stroke();
+        ctx.globalAlpha = .9;
+        ctx.fillStyle = '#c9a0ff';
+        ctx.font = 'bold 11px system-ui, sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('MEGA', this.x, this.y - 30);
+        ctx.restore();
+      }
       const kick = this.recoil > 0 ? this.recoil * 3 : 0;
       PTD.sprites.draw(ctx, d.dexId, this.x - this.facing * kick, this.y - 3, 54, t, {
         phase: (d.dexId * 211) % 900,

@@ -10,95 +10,71 @@
 <body>
 
 <div id="app">
-
   <header id="hud">
     <div class="brand">
       <span class="ball"></span>
       <span>Poke <b>Defense</b></span>
     </div>
-
-    <div class="stat money"><span class="ico">₽</span><b id="money">500</b></div>
-    <div class="stat heart"><span class="ico">❤</span><b id="lives">20</b></div>
-    <div class="stat"><span class="lbl">เวฟ</span><b id="wave">1/30</b></div>
-    <div class="stat team"><span class="ico">🎒</span><b id="team">0/12</b></div>
-
+    <div id="hudStats"></div>
     <div class="grow"></div>
-
-    <button id="btnWave" class="primary">เริ่มเวฟ 1 ▶</button>
-    <button id="btnSpeed" class="icon" title="ความเร็ว (X)">1x</button>
-    <button id="btnPause" class="icon" title="พัก (Space)">⏸</button>
-    <button id="btnSound" class="icon" title="เสียง">🔊</button>
-    <button id="btnHelp" class="icon" title="วิธีเล่น">?</button>
-    <button id="btnRestart" class="icon" title="เริ่มใหม่">↺</button>
+    <div id="hudActions"></div>
   </header>
 
-  <main id="main">
-    <div id="stage">
-      <canvas id="game"></canvas>
-      <div id="endscreen" hidden></div>
+  <div id="view">
+    <!-- หน้าจอที่ใช้แคนวาส: ซาฟารี กับ สนามรบ -->
+    <div id="canvasView" hidden>
+      <div id="stage">
+        <canvas id="game"></canvas>
+        <div id="endscreen" hidden></div>
+      </div>
+      <aside id="side"></aside>
     </div>
 
-    <aside id="side">
-      <div id="shopWrap"></div>
-      <div id="detail" hidden></div>
-      <div id="preview"></div>
-      <div class="side-foot">
-        <kbd>1-0</kbd> เลือก 10 ตัวแรกในรายการ · <kbd>Shift</kbd> วางรัว ·
-        <kbd>Esc</kbd> ยกเลิก · <kbd>Space</kbd> พัก · <kbd>X</kbd> เร่ง ·
-        <kbd>E</kbd> วิวัฒนาการ · <kbd>C</kbd> ลูกอม · <kbd>S</kbd> ขาย
-      </div>
-    </aside>
-  </main>
+    <!-- หน้าจอที่เป็น DOM ล้วน: เลือกตัวเริ่มต้น แผนที่โลก จัดทีม โปเกเด็กซ์ -->
+    <div id="domScreen" hidden></div>
+  </div>
 </div>
+
+<div id="modal" hidden></div>
+<div id="toast"></div>
 
 <div id="help" hidden>
   <div class="help-box">
-    <h2>วิธีเล่น</h2>
+    <h2>ภาพรวม</h2>
+    <p>เกมนี้ไม่ได้ซื้อโปเกม่อนด้วยเงิน — ต้อง <b>ออกไปจับเอง</b> ที่โซนซาฟารี
+       แล้วเลือกมาลงสนามได้ <b>สูงสุด 6 ตัว</b> ตามกฎจริงของโปเกม่อน</p>
     <ol>
-      <li>เลือกโปเกม่อนจากแถบขวา แล้วคลิกบนพื้นหญ้าเพื่อวาง (วางบนทางเดินหรือบนต้นไม้/หินไม่ได้)</li>
-      <li>ร้านมีเฉพาะ <b>ร่างเริ่มต้น</b> ของแต่ละสาย 79 ตัว — ร่างหลังจากนั้นต้องวิวัฒนาการเอาเท่านั้น
-          ใช้ช่องค้นหาหรือกรองธาตุเพื่อหาตัวที่ต้องการ</li>
-      <li>ศัตรูจะเดินจากป้าย <b>เข้า</b> ไป <b>ออก</b> ถ้าหลุดออกไปได้จะเสียหัวใจ หมดหัวใจคือแพ้</li>
-      <li>โปเกม่อนได้ EXP จากการทำดาเมจ พอถึงเลเวลที่กำหนดจะมีลูกศร <b>▲</b> ขึ้นเหนือหัว = วิวัฒนาการได้</li>
-      <li>วิวัฒนาการต้องจ่ายเงิน แต่คุ้มมาก — พลังกระโดดเป็นเท่าตัวและมักได้ท่าใหม่</li>
-      <li>กดเรียกเวฟก่อนหมดเวลาพัก จะได้เงินโบนัสตามวินาทีที่เหลือ</li>
+      <li><b>โซนซาฟารี</b> — เดินบนหญ้าสูงเพื่อเจอโปเกม่อนป่า แล้วใช้ลูกบอลจับ</li>
+      <li><b>จัดทีม</b> — เลือกจากกล่องได้ 6 ตัว เลเวลติดตัวข้ามด่าน</li>
+      <li><b>ด่านแคมเปญ</b> — วางทีมป้องกันไม่ให้ศัตรูเดินทะลุ ผ่านแล้วได้เงิน ลูกบอล และหินเมก้า</li>
+      <li><b>เควสในตำนาน</b> — ปลดล็อกตามจำนวนด่านที่ผ่านและสายพันธุ์ที่จับได้</li>
     </ol>
 
-    <h2>ระบบธาตุคือหัวใจ</h2>
-    <p>ความเสียหายคิดจากตารางธาตุจริงของโปเกม่อน — ท่าธาตุไฟใส่ธาตุหญ้าได้ 2 เท่า, ใส่ธาตุน้ำเหลือครึ่งเดียว
-       และถ้าศัตรูมีสองธาตุ ตัวคูณจะคูณกัน (เช่น ไฟ ใส่ แมลง/หญ้า = 4 เท่า)</p>
-    <p class="note">หมายเหตุ: ในเกมจริงบางคู่ธาตุจะ “ไม่ได้ผลเลย” (0 เท่า) แต่ในเกมนี้ปรับพื้นเป็น
-       <b>0.25 เท่า</b> เพื่อไม่ให้ป้อมกลายเป็นไร้ประโยชน์สนิท</p>
-
-    <h2>สถานะผิดปกติ</h2>
+    <h2>การจับแบบซาฟารี</h2>
+    <p>โอกาสจับคำนวณจาก <b>อัตราการจับจริง</b> ของแต่ละตัว (Caterpie 255 = ง่ายสุด, Mewtwo 3 = ยากสุด)</p>
     <ul>
-      <li><b>ไหม้ / พิษ</b> — เสียเลือดต่อเนื่อง ไม่สนใจเกราะ</li>
-      <li><b>ช้าลง</b> — ลดความเร็วเดิน ซ้อนกันได้แต่ใช้ค่าที่แรงที่สุด</li>
-      <li><b>หยุดชะงัก</b> — หยุดนิ่งชั่วครู่</li>
+      <li><b>โยนเหยื่อ</b> — มันจะมัวกิน หนียากขึ้น แต่จับยากขึ้นด้วย</li>
+      <li><b>ขว้างก้อนหิน</b> — มันโกรธ จับง่ายขึ้นมาก แต่ก็หนีง่ายขึ้นมากเช่นกัน</li>
+      <li>ขว้างหินก่อนแล้วค่อยขว้างบอลคือวิธีที่ได้ผลดีกับตัวหายาก แต่เสี่ยงหลุดมือ</li>
     </ul>
+
+    <h2>เมก้าอีโวลูชัน</h2>
+    <p>ต้องมี <b>หินเมก้า</b> ของสายพันธุ์นั้น (ได้จากการผ่านด่าน) แล้วกดในสนามรบ
+       — <b>ได้ครั้งเดียวต่อด่าน และทีละตัวเท่านั้น</b> จบด่านจะกลับร่างเดิม</p>
+    <p>ร่างเมก้าใช้สเตตัสจริงของร่างนั้นทั้งชุด ไม่ใช่บวกเปอร์เซ็นต์ บางร่างเปลี่ยนธาตุด้วย
+       เช่น Mega Charizard X เป็นไฟ/มังกร, Mega Gyarados เป็นน้ำ/อสูร</p>
+    <p class="note">Gen 1 มีร่างเมก้าทางการ 15 ร่างจาก 13 สายพันธุ์ —
+       Venusaur, Charizard (X/Y), Blastoise, Beedrill, Pidgeot, Alakazam, Slowbro,
+       Gengar, Kangaskhan, Pinsir, Gyarados, Aerodactyl, Mewtwo (X/Y)</p>
 
     <h2>ค่าพลังมาจากไหน</h2>
-    <p>ทุกตัวใช้ <b>สเตตัสจริงของโปเกม่อน</b> คำนวณเป็นค่าในเกม ไม่ได้ตั้งมือ:</p>
-    <ul>
-      <li><b>Atk / SpA</b> ที่สูงกว่า → พลังโจมตี</li>
-      <li><b>Spe</b> → ความเร็วในการยิง</li>
-      <li>ตัวที่ <b>SpA มากกว่า Atk</b> → สายยิงไกล, ตัวที่ <b>Atk นำ</b> → สายประชิดตีรัว</li>
-      <li><b>Def / SpD / HP</b> → ความอึดและเกราะตอนเป็นศัตรู</li>
-      <li><b>BST</b> (ผลรวมสเตตัส) → ราคา</li>
-    </ul>
-    <p class="note">เลเวลที่ต้องใช้วิวัฒนาการก็อิงของจริง — ตัวที่เกมต้นฉบับวิวัฒน์ที่เลเวลสูง
-       ในเกมนี้ก็ต้องเลี้ยงนานกว่า ส่วนตัวที่ใช้หินหรือการแลกเปลี่ยนจะมีเงื่อนไขของตัวเอง</p>
+    <p>ทุกตัวใช้ <b>สเตตัสจริงของโปเกม่อน</b> คำนวณเป็นค่าในเกม ไม่ได้ตั้งมือ:
+       Atk/SpA สูง = แรง, Spe สูง = ยิงถี่, SpA มากกว่า Atk = สายยิงไกล,
+       Atk นำ = สายประชิดตีรัว, Def สูง = เกราะหนาตอนเป็นศัตรู</p>
+    <p class="note">ความเสียหายคิดจากตารางธาตุจริงครบ 18 ธาตุ คู่ที่ปกติ "ไม่ได้ผลเลย"
+       ปรับพื้นเป็น 0.25 เท่า เพื่อไม่ให้ตัวที่เลี้ยงมากลายเป็นไร้ประโยชน์สนิท</p>
 
-    <h2>ทิป</h2>
-    <ul>
-      <li>ศัตรูที่ <b>Def สูง</b> (Onix, Golem, Cloyster) มีเกราะหนา ลดดาเมจเป็นสัดส่วน —
-          สาย Ghost อย่าง Gastly ทะลุเกราะได้หมด</li>
-      <li>บอสบางตัวมีออร่ากวน — <b>Zapdos</b> ทำให้ป้อมรอบตัวยิงช้าลง, <b>Dragonite/Mewtwo</b> ลดพลังโจมตี
-          อย่าวางป้อมกระจุกที่เดียว</li>
-      <li>สายหญ้ากับน้ำแข็งหน่วงศัตรูได้ดี วางไว้ต้นทางแล้วให้ตัวดาเมจสูงรุมตรงโค้ง</li>
-      <li>Eevee วิวัฒนาการได้ 3 ทาง (Vaporeon / Jolteon / Flareon) เลือกให้ตรงกับธาตุที่เวฟหน้าต้องการ</li>
-    </ul>
-    <button onclick="document.getElementById('help').hidden=true">ปิด</button>
+    <button id="helpClose">ปิด</button>
   </div>
 </div>
 
@@ -106,11 +82,15 @@
 <script src="js/gen1.js"></script>
 <script src="js/derive.js"></script>
 <script src="js/sprites.js"></script>
+<script src="js/save.js"></script>
 <script src="js/map.js"></script>
 <script src="js/waves.js"></script>
+<script src="js/campaign.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/entities.js"></script>
+<script src="js/safari.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/game.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>
