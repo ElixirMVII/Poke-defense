@@ -191,6 +191,31 @@
       return true;
     },
 
+    // ย้ายตัวที่วางแล้วไปช่องอื่น — เลือกแล้วแตะช่องว่างได้เลย
+    startMove(tower) {
+      const t = tower || this.selected;
+      if (!t) return;
+      this.movingTower = t;
+      this.placing = null;
+      this.setBanner('เลือกช่องใหม่ที่จะย้ายไป', '#8be0ff');
+      PTD.ui.refresh();
+    },
+    cancelMove() { this.movingTower = null; PTD.ui.refresh(); },
+    moveTo(c, r) {
+      const t = this.movingTower;
+      if (!t) return false;
+      if (!M.buildable(c, r)) { PTD.sfx.deny(); this.setBanner('วางตรงนี้ไม่ได้', '#ff8a8a'); return false; }
+      const other = this.towerAt(c, r);
+      if (other && other !== t) { PTD.sfx.deny(); this.setBanner('ช่องนี้มีตัวอื่นอยู่', '#ff8a8a'); return false; }
+      t.c = c; t.r = r;
+      const p = M.centerOf(c, r);
+      t.x = p.x; t.y = p.y;
+      this.movingTower = null;
+      PTD.sfx.place();
+      PTD.ui.refresh();
+      return true;
+    },
+
     // เก็บกลับมาวางใหม่ได้ฟรี เพราะมีแค่ 6 ตัว ตำแหน่งต้องแก้ได้
     recall(tower) {
       const t = tower || this.selected;
@@ -412,6 +437,14 @@
       }
       ctx.drawImage(M.terrain, 0, 0);
 
+      if (this.movingTower) {
+        const t = this.movingTower;
+        ctx.save();
+        ctx.globalAlpha = .45 + .2 * Math.sin(this.time * 6);
+        ctx.strokeStyle = '#8be0ff'; ctx.lineWidth = 3;
+        ctx.strokeRect(t.c * M.TILE + 3, t.r * M.TILE + 3, M.TILE - 6, M.TILE - 6);
+        ctx.restore();
+      }
       if (this.placing) {
         const { c, r } = this.hover;
         const slot = this.slotOf(this.placing);
@@ -520,7 +553,7 @@
       this.waveIndex = 0; this.waveTime = 0; this.breakLeft = 0;
       this.spawnQueue = []; this.enemies = []; this.towers = [];
       this.projectiles = []; this.fx = [];
-      this.placing = null; this.selected = null;
+      this.placing = null; this.selected = null; this.movingTower = null;
       this.megaUsed = false;
       this.questTarget = null; this.questBest = 1;
       this.result = null;
@@ -543,6 +576,7 @@
     /* ---------- อินพุต ---------- */
     click(x, y) {
       const { c, r } = M.tileOf(x, y);
+      if (this.movingTower) { this.moveTo(c, r); return; }
       if (this.placing) { this.tryPlace(c, r); return; }
       this.selected = this.towerAt(c, r);
       PTD.ui.refresh();
@@ -552,7 +586,10 @@
     key(k) {
       switch (k) {
         case ' ': this.paused = !this.paused; PTD.ui.refresh(); return true;
-        case 'Escape': this.placing = null; this.selected = null; PTD.ui.refresh(); return true;
+        case 'Escape':
+          this.placing = null; this.movingTower = null; this.selected = null;
+          PTD.ui.refresh(); return true;
+        case 'v': case 'V': this.startMove(); return true;
         case 'Enter': if (this.state === 'ready' || this.state === 'break') this.startWave(); return true;
         case 'e': case 'E': this.evolveSelected(0); return true;
         case 'c': case 'C': this.buyCandy(); return true;

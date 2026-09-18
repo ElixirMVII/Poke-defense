@@ -203,7 +203,8 @@
     const d = PTD.dex(id);
     if (!d) return null;
     const st = d.s;
-    const bulk = st[S.HP] * 2 + st[S.DEF] + st[S.SPD];
+    // ถ่วงให้ HP ไม่ครอบงำจนตัวอย่าง Chansey (HP 250) อึดกว่าชาวบ้านเป็นเท่าตัว
+    const bulk = st[S.HP] * 1.6 + st[S.DEF] * 0.7 + st[S.SPD] * 0.7;
     return {
       id, dexId: id,
       name: d.name || d.n, jp: d.jp,
@@ -219,6 +220,14 @@
       regen: opts.boss ? Math.round(bulk * .02) : 0,
       aura: opts.aura || null
     };
+  }
+
+  // ความน่ากลัวที่ผู้เล่นรู้สึกจริง = อึดแค่ไหนหลังคิดเกราะ บวกความเร็วนิดหน่อย
+  // ใช้จัดระดับเวฟ แทนการใช้ BST ซึ่งไม่ตรงกับความอึดจริง
+  function threatOf(id) {
+    const e = enemy(id, {});
+    if (!e) return 0;
+    return e.hp * (1 + e.armor / 60) * (1 + e.speed / 400);
   }
 
   function bossGlow(type) {
@@ -240,6 +249,7 @@
   PTD.megaTower = megaTower;
   PTD.buildTower = buildTower;
   PTD.enemy = enemy;
+  PTD.threatOf = threatOf;
   PTD.shopList = shopList;
   PTD.moveTypeOf = moveTypeOf;
   PTD.TUNE = TUNE;

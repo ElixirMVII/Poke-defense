@@ -16,6 +16,10 @@ const REPO = path.resolve(__dirname, '..');
 const SPRITES = process.env.SPRITES || '/tmp/claude-0/sprites';
 const PORT = 8902;
 const STRATEGY = process.argv[2] || 'best';
+const DIFF_HP = Number(process.env.DIFF_HP || 1);
+const DIFF_COUNT = Number(process.env.DIFF_COUNT || 1);
+const HP_BASE = Number(process.env.HP_BASE || 0);
+const HP_STEP = Number(process.env.HP_STEP || 0);
 const CATCH_PER_STAGE = Number(process.argv[3] || 10);
 
 (async () => {
@@ -28,8 +32,14 @@ const CATCH_PER_STAGE = Number(process.argv[3] || 10);
   await page.goto(`http://127.0.0.1:${PORT}/index.html`);
   await page.waitForTimeout(700);
 
-  const out = await page.evaluate(({ STRATEGY, CATCH_PER_STAGE }) => {
+  const out = await page.evaluate(({ STRATEGY, CATCH_PER_STAGE, DIFF_HP, DIFF_COUNT, HP_BASE, HP_STEP }) => {
     const PTD = window.PTD, B = PTD.battle, M = PTD.map;
+    PTD.campaign.DIFF.hp = DIFF_HP;
+    PTD.campaign.DIFF.count = DIFF_COUNT;
+    if (HP_BASE) {
+      // ปรับทั้งเส้นด้วยตัวคูณเดียว ใช้ตอนกวาดหาค่า
+      PTD.campaign.setHpTargets(PTD.campaign.hpTargets.map(v => v * HP_BASE));
+    }
     if (PTD.audio.enabled) PTD.audio.toggle();
     PTD.save.reset();
     PTD.save.data.started = true;
@@ -69,7 +79,7 @@ const CATCH_PER_STAGE = Number(process.argv[3] || 10);
       const box = PTD.save.data.box.slice();
       if (STRATEGY === 'random') {
         box.sort(() => rnd() - .5);
-      } else if (STRATEGY === 'starter') {
+      } else if (STRATEGY === 'starterX') {
         box.sort((a, b) => a.uid - b.uid);
       } else {
         // best: เรียงตาม DPS โดยประมาณที่เลเวลปัจจุบัน แล้วเลือกให้ธาตุไม่ซ้ำกันมาก
@@ -111,6 +121,10 @@ const CATCH_PER_STAGE = Number(process.argv[3] || 10);
     /* ---- เล่นหนึ่งด่าน ---- */
     function play(cfg, label) {
       B.enter(cfg);
+      // HP รวมทั้งด่าน เทียบกับ DPS ของทีม = "ต้องยิงกี่วินาทีถึงจะเคลียร์หมด"
+      let totalHp = 0;
+      for (const w of B.waves) for (const g of w.groups)
+        totalHp += g.count * PTD.enemy(g.id, { boss: g.boss, bossX: g.bossX }).hp * w.hpMul;
       const leaks = {};
       const orig = B.leak.bind(B);
       B.leak = function (e) {
@@ -126,6 +140,8 @@ const CATCH_PER_STAGE = Number(process.argv[3] || 10);
         B.tryPlace(spots[i].c, spots[i].r);
       });
       B.placing = null;
+      // กลยุทธ์ idle = วางแล้วไม่แตะอะไรอีกเลย ใช้ทดสอบว่าเกม "ปล่อยทิ้งก็ชนะ" ไหม
+      const IDLE = STRATEGY === 'idle';
 
       const dt = 1 / 30;
       let steps = 0, thinkT = 0;
@@ -135,7 +151,7 @@ const CATCH_PER_STAGE = Number(process.argv[3] || 10);
         B.update(dt);
         steps++;
         thinkT += dt;
-        if (thinkT >= .5) {
+        if (thinkT >= .5 && !IDLE) {
           thinkT = 0;
           // วิวัฒนาการก่อน แล้วค่อยป้อนลูกอม
           let did = false;
@@ -167,6 +183,8 @@ const CATCH_PER_STAGE = Number(process.argv[3] || 10);
         team: B.towers.map(t => t.def.name + ' Lv' + t.level),
         maxLv: B.towers.reduce((m, t) => Math.max(m, t.level), 0),
         questBest: B.mode === 'quest' ? Math.round(B.questBest * 100) : null,
+        totalHp: Math.round(totalHp),
+        secNeeded: Math.round(totalHp / Math.max(1, B.towers.reduce((s, t) => s + t.dps, 0))),
         leaks: Object.entries(leaks).sort((a, b) => b[1] - a[1]).slice(0, 4)
       };
     }
@@ -200,10 +218,10 @@ const CATCH_PER_STAGE = Number(process.argv[3] || 10);
     return { strategy: STRATEGY, log, quests,
              final: { box: PTD.save.data.box.length, dex: PTD.save.dexCaught,
                       money: PTD.save.money, stones: PTD.save.data.stones.length } };
-  }, { STRATEGY, CATCH_PER_STAGE });
+  }, { STRATEGY, CATCH_PER_STAGE, DIFF_HP, DIFF_COUNT, HP_BASE, HP_STEP });
 
-  console.log(`\n=== กลยุทธ์: ${out.strategy} (จับ ${CATCH_PER_STAGE} ตัวก่อนแต่ละด่าน) ===`);
-  console.log('ผล  ด่าน                       เวฟ    หัวใจ  DPS   maxLv  จับได้  ตัวที่หลุด');
+  console.log(`\n=== ${out.strategy} · จับ ${CATCH_PER_STAGE}/ด่าน · hp×${DIFF_HP} count×${DIFF_COUNT} ===`);
+  console.log('ผล  ด่าน                       เวฟ    หัวใจ  DPS   maxLv  จับ  HPรวม   วิ.ที่ต้องยิง  ตัวที่หลุด');
   for (const r of out.log) {
     console.log(
       (r.won ? ' ✓ ' : ' ✗ '),
@@ -212,7 +230,9 @@ const CATCH_PER_STAGE = Number(process.argv[3] || 10);
       String(r.lives).padStart(6),
       String(r.dps).padStart(6),
       String(r.maxLv).padStart(6),
-      String(r.dexCaught).padStart(6), ' ',
+      String(r.dexCaught).padStart(4),
+      String(Math.round(r.totalHp / 1000) + 'k').padStart(7),
+      String(r.secNeeded).padStart(9), '  ',
       r.leaks.map(([k, v]) => `${k}x${v}`).join(', ') || '—');
   }
   console.log('\nเควสในตำนาน:');

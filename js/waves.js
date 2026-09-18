@@ -48,10 +48,11 @@
       roster = filtered.length >= 12 ? filtered
              : filtered.concat(roster.filter(d => !allow.has(d.id)).slice(0, 24));
     }
-    roster.sort((a, b) => a.bst - b.bst || a.id - b.id);
+    // เรียงตาม "ความน่ากลัวจริง" (อึดหลังคิดเกราะ) ไม่ใช่ BST
+    // เพราะ BST ไม่บอกว่าตัวไหนแทงไม่เข้า — Chansey BST แค่ 450 แต่อึดกว่าใครในเกม
+    roster.sort((a, b) => PTD.threatOf(a.id) - PTD.threatOf(b.id) || a.id - b.id);
 
     // แบ่งเป็น 5 ระดับด้วยการหั่นตามลำดับ ให้แต่ละระดับมีสมาชิกพอ ๆ กัน
-    // (ถ้าหั่นด้วยเลข BST ตายตัว ระดับบนสุดจะเหลือตัวเดียวแล้วโผล่ซ้ำทั้งเกม)
     const pools = [[], [], [], [], []];
     roster.forEach((d, i) => pools[Math.min(4, Math.floor(i * 5 / roster.length))].push(d.id));
 
@@ -81,6 +82,7 @@
 
       const groups = [];
       const used = new Set();
+      // มีป้อมได้แค่ 6 ตัว ถ้าปล่อย 4 กลุ่มพร้อมกันคือ 60 ตัวต่อเวฟ รับไม่ไหวแน่
       const nGroups = w <= 2 ? 1 : (w <= 6 ? 2 : 3);
       let delay = 0;
 

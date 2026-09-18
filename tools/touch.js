@@ -54,7 +54,26 @@ fs.mkdirSync(OUT, { recursive: true });
     const after = await page.evaluate(() => ({ c: PTD.safari.state.tc, r: PTD.safari.state.tr }));
     log('แตะเดิน:', JSON.stringify(before), '->', JSON.stringify(after),
         (before.c !== after.c || before.r !== after.r) ? '✓ ขยับ' : '✗ ไม่ขยับ');
+
+    // กดปุ่มทิศทางบนจอ (ทางเดินหลักบนไอแพดที่ไม่มีคีย์บอร์ด)
+    const padBefore = await page.evaluate(() => ({ c: PTD.safari.state.tc, r: PTD.safari.state.tr }));
+    const pad = await page.evaluate(() => {
+      const cv = document.getElementById('game');
+      const b = PTD.safari.padButtons().find(p => p.dir === 'left');
+      return { x: b.cx / cv.width, y: b.cy / cv.height };
+    });
+    await page.touchscreen.tap(box.x + box.width * pad.x, box.y + box.height * pad.y);
+    await page.waitForTimeout(700);
+    const padAfter = await page.evaluate(() => ({ c: PTD.safari.state.tc, r: PTD.safari.state.tr }));
+    log('ปุ่มทิศทาง:', JSON.stringify(padBefore), '->', JSON.stringify(padAfter),
+        (padBefore.c !== padAfter.c || padBefore.r !== padAfter.r) ? '✓ ขยับ' : '✗ ไม่ขยับ');
     await page.screenshot({ path: `${OUT}/t-${label}-safari.png` });
+
+    // เดินบนหญ้าอาจเจอตัวป่าโผล่มาพอดี ปิดทิ้งก่อนไปทดสอบต่อ
+    await page.evaluate(() => {
+      if (PTD.safari.encounter) { PTD.safari.state.encounter = null; PTD.ui.closeModal(); }
+    });
+    await page.waitForTimeout(200);
 
     // กลับไปลงด่าน (ต้องมีตัวในทีมก่อน)
     await page.evaluate(() => {

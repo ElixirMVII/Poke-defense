@@ -87,6 +87,16 @@
         const p = toCanvas(ev);
         PTD.battle.move(p.x, p.y);
       });
+      // ปุ่มทิศทางในซาฟารีต้องกดค้างได้ ใช้ pointer event ครอบคลุมทั้งเมาส์และนิ้ว
+      canvas.addEventListener('pointerdown', (ev) => {
+        if (this.screen !== 'safari') return;
+        const p = toCanvas(ev);
+        if (PTD.safari.press(p.x, p.y)) { ev.preventDefault(); canvas.setPointerCapture(ev.pointerId); }
+      });
+      const stopPad = () => { if (this.screen === 'safari') PTD.safari.release(); };
+      canvas.addEventListener('pointerup', stopPad);
+      canvas.addEventListener('pointercancel', stopPad);
+      canvas.addEventListener('pointerleave', stopPad);
       canvas.addEventListener('mouseleave', () => { PTD.battle.hover = { c: -1, r: -1 }; });
       canvas.addEventListener('click', (ev) => {
         PTD.audio.unlock();

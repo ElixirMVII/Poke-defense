@@ -19,17 +19,26 @@
   // hb = habitat_id ของ PokeAPI: 1 ถ้ำ, 2 ป่า, 3 ทุ่งหญ้า, 4 ภูเขา,
   //                              5 หายาก, 6 ทุรกันดาร, 7 ทะเล, 8 เมือง, 9 ริมน้ำ
   const ZONES = [
-    { id: 'route',    name: 'ทุ่งหญ้าต้นทาง', hb: [3],    lv: [3, 8],   need: 0,
+    // stageW = น้ำหนักการเจอตามขั้นวิวัฒนาการ [ร่างแรก, ร่างกลาง, ร่างสุดท้าย]
+    // bstCap = ค่าพลังรวมที่ถือว่า "ปกติ" ของโซนนี้ เกินจากนี้จะเจอยากขึ้นเรื่อย ๆ
+    // โซนต้น ๆ จึงเจอแต่ตัวอ่อน ต้องเลี้ยงเอง ไม่ใช่เดินไปจับตัวเทพมาเลย
+    { id: 'route',    name: 'ทุ่งหญ้าต้นทาง', hb: [3],    lv: [3, 7],   need: 0,
+      stageW: [1, .06, 0], bstCap: 330,
       pal: { base: '#6fb552', alt: '#78bd5a', tall: '#2f6b28', block: 'tree' }, water: 0 },
-    { id: 'forest',   name: 'ป่าลึก',        hb: [2],    lv: [6, 13],  need: 1,
+    { id: 'forest',   name: 'ป่าลึก',        hb: [2],    lv: [5, 11],  need: 1,
+      stageW: [1, .16, .01], bstCap: 370,
       pal: { base: '#4e8f46', alt: '#579a4c', tall: '#1f4d22', block: 'tree' }, water: 0 },
-    { id: 'town',     name: 'ชานเมืองเก่า',  hb: [8],    lv: [9, 17],  need: 2,
+    { id: 'town',     name: 'ชานเมืองเก่า',  hb: [8],    lv: [8, 15],  need: 2,
+      stageW: [1, .30, .04], bstCap: 385,
       pal: { base: '#9a9a86', alt: '#a4a48e', tall: '#4a6238', block: 'rock' }, water: 0 },
-    { id: 'lake',     name: 'ริมทะเลสาบ',    hb: [9, 7], lv: [12, 21], need: 3,
+    { id: 'lake',     name: 'ริมทะเลสาบ',    hb: [9, 7], lv: [11, 19], need: 4,
+      stageW: [.9, .48, .11], bstCap: 420,
       pal: { base: '#6fb552', alt: '#78bd5a', tall: '#2f6b28', block: 'tree' }, water: .30 },
-    { id: 'cave',     name: 'ถ้ำมืด',        hb: [1, 6], lv: [15, 25], need: 4,
+    { id: 'cave',     name: 'ถ้ำมืด',        hb: [1, 6], lv: [14, 23], need: 6,
+      stageW: [.7, .70, .26], bstCap: 460,
       pal: { base: '#5a5464', alt: '#645d70', tall: '#2a323a', block: 'rock' }, water: .08 },
-    { id: 'mountain', name: 'ภูเขาไฟ',       hb: [4],    lv: [19, 30], need: 5,
+    { id: 'mountain', name: 'ภูเขาไฟ',       hb: [4],    lv: [18, 28], need: 8,
+      stageW: [.45, .85, .55], bstCap: 540,
       pal: { base: '#8a6a5a', alt: '#947264', tall: '#4a3628', block: 'rock' }, water: 0 }
   ];
 
@@ -68,14 +77,14 @@
     }
 
     // หญ้าสูงเป็นหย่อม ๆ
-    const patches = 7 + Math.floor(rnd() * 4);
+    const patches = 5 + Math.floor(rnd() * 3);
     for (let i = 0; i < patches; i++) {
       const cx = 1 + Math.floor(rnd() * (COLS - 2)), cy = 1 + Math.floor(rnd() * (ROWS - 2));
-      const rw = 1 + Math.floor(rnd() * 3), rh = 1 + Math.floor(rnd() * 2);
+      const rw = 1 + Math.floor(rnd() * 2), rh = 1;
       for (let r = cy - rh; r <= cy + rh; r++) for (let c = cx - rw; c <= cx + rw; c++) {
         if (r < 0 || r >= ROWS || c < 0 || c >= COLS) continue;
         if (grid[r][c] !== FLOOR) continue;
-        if (rnd() < .78) grid[r][c] = TALL;
+        if (rnd() < .72) grid[r][c] = TALL;
       }
     }
 
@@ -278,6 +287,52 @@
     return ids.length ? ids : PTD.DEX.filter(d => !d.lg).map(d => d.id);
   }
 
+  // ขั้นวิวัฒนาการ: 0 = ร่างแรก, 1 = ร่างกลาง, 2 = ร่างสุดท้าย
+  const stageCache = new Map();
+  function evoStage(id) {
+    if (stageCache.has(id)) return stageCache.get(id);
+    let n = 0, d = PTD.dex(id);
+    while (d && d.from) { n++; d = PTD.dex(d.from); }
+    stageCache.set(id, n);
+    return n;
+  }
+
+  // น้ำหนักการเจอของแต่ละตัวในโซนนั้น
+  function encounterWeight(zone, id) {
+    const d = PTD.dex(id);
+    if (!d) return 0;
+    const sw = (zone.stageW || [1, 1, 1])[Math.min(2, evoStage(id))];
+    if (sw <= 0) return 0;
+    // ตัวที่พลังรวมเกินเพดานของโซนจะเจอยากขึ้นแบบทวีคูณ
+    const over = Math.max(0, d.bst - (zone.bstCap || 999));
+    const bstW = Math.pow(0.30, over / 60);
+    // ตัวที่จับยากอยู่แล้วก็ควรเจอน้อยลงด้วย ไม่ใช่เจอบ่อยแต่จับไม่ได้
+    const rareW = 0.35 + 0.65 * Math.min(1, d.cr / 120);
+    return sw * bstW * rareW;
+  }
+
+  // ตารางน้ำหนักของโซน คำนวณครั้งเดียวแล้วเก็บไว้
+  const weightCache = new Map();
+  function weightsOf(zone) {
+    if (weightCache.has(zone.id)) return weightCache.get(zone.id);
+    const pool = poolOf(zone);
+    const w = pool.map(id => encounterWeight(zone, id));
+    const total = w.reduce((a, b) => a + b, 0);
+    const table = { pool, w, total: total > 0 ? total : 1 };
+    weightCache.set(zone.id, table);
+    return table;
+  }
+
+  function rollWild(zone) {
+    const t = weightsOf(zone);
+    let r = Math.random() * t.total;
+    for (let i = 0; i < t.pool.length; i++) {
+      r -= t.w[i];
+      if (r <= 0) return t.pool[i];
+    }
+    return t.pool[0];
+  }
+
   function enter(zoneId) {
     const zone = zoneById(zoneId);
     if (!zone) return false;
@@ -314,7 +369,7 @@
 
   function startEncounter() {
     const zone = S.zone;
-    const id = S.pool[Math.floor(Math.random() * S.pool.length)];
+    const id = rollWild(zone);
     const lv = zone.lv[0] + Math.floor(Math.random() * (zone.lv[1] - zone.lv[0] + 1));
     S.encounter = { id, lv, angry: 0, eating: 0, turns: 0 };
     S.path = null; S.target = null;
@@ -422,6 +477,17 @@
     }
     S.path = null;
 
+    // ปุ่มทิศทางบนจอ (กดค้างได้ และแตะสั้น ๆ ที่ค้างคิวไว้ก็เดินให้หนึ่งช่อง)
+    const pv = S.padVec || S.padOnce;
+    if (pv) {
+      S.padOnce = null;
+      S.padUsed = true;
+      S.dir = pv.face;
+      S.stepAcc += dt;
+      tryStep(pv.dc, pv.dr);
+      return;
+    }
+
     // ปุ่มลูกศร / WASD
     const k = S.keys;
     let dc = 0, dr = 0;
@@ -430,6 +496,61 @@
     else if (k.up) { dr = -1; S.dir = 2; }
     else if (k.down) { dr = 1; S.dir = 0; }
     if (dc || dr) { S.stepAcc += dt; tryStep(dc, dr); }
+  }
+
+  /* ---------------- ปุ่มทิศทางบนจอ ----------------
+   * เดิมมีแต่ลูกศรกับการแตะช่อง ซึ่งบนแท็บเล็ตไม่มีอะไรบอกว่าทำได้
+   * และในหน้าที่ฝังใน iframe คีย์บอร์ดก็ไม่ทำงานจนกว่าจะคลิกในกรอบก่อน */
+  const PAD = { x: W - 92, y: H - 96, r: 30, gap: 34 };
+  function padButtons() {
+    const { x, y, gap } = PAD;
+    return [
+      { dir: 'up',    cx: x,       cy: y - gap, dc: 0,  dr: -1, face: 2 },
+      { dir: 'down',  cx: x,       cy: y + gap, dc: 0,  dr: 1,  face: 0 },
+      { dir: 'left',  cx: x - gap, cy: y,       dc: -1, dr: 0,  face: 3 },
+      { dir: 'right', cx: x + gap, cy: y,       dc: 1,  dr: 0,  face: 1 }
+    ];
+  }
+
+  function drawPad(ctx) {
+    ctx.save();
+    // แผ่นรองใต้ปุ่ม
+    ctx.globalAlpha = .28;
+    ctx.fillStyle = '#0b1018';
+    ctx.beginPath();
+    ctx.roundRect(PAD.x - 68, PAD.y - 68, 136, 136, 24);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    for (const b of padButtons()) {
+      const held = S.padHeld === b.dir;
+      ctx.beginPath();
+      ctx.arc(b.cx, b.cy, PAD.r, 0, TAU);
+      ctx.fillStyle = held ? 'rgba(214,59,47,.92)' : 'rgba(20,28,40,.82)';
+      ctx.fill();
+      ctx.strokeStyle = held ? '#ffd9a0' : 'rgba(236,239,241,.55)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // หัวลูกศร
+      ctx.fillStyle = '#eceff1';
+      ctx.save();
+      ctx.translate(b.cx, b.cy);
+      ctx.rotate(b.dir === 'up' ? -Math.PI / 2 : b.dir === 'down' ? Math.PI / 2
+               : b.dir === 'left' ? Math.PI : 0);
+      ctx.beginPath();
+      ctx.moveTo(-6, -8); ctx.lineTo(8, 0); ctx.lineTo(-6, 8);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  // คืนปุ่มที่ถูกแตะ ถ้าแตะโดน
+  function padHit(x, y) {
+    for (const b of padButtons()) {
+      if (Math.hypot(x - b.cx, y - b.cy) <= PAD.r + 4) return b;
+    }
+    return null;
   }
 
   /* ---------------- วาด ---------------- */
@@ -448,6 +569,7 @@
     }
 
     drawTrainer(ctx, S.px, S.py, S.dir, S.stepAcc);
+    drawPad(ctx);
 
     // แถบข้อมูลด้านบน
     ctx.save();
@@ -464,8 +586,8 @@
     ctx.fillStyle = '#93a0bd';
     ctx.textAlign = 'right';
     ctx.fillText(PTD.ui && PTD.ui.TOUCH
-      ? 'แตะช่องที่อยากไป'
-      : 'ลูกศร/WASD เดิน · คลิกเพื่อเดินไปจุดนั้น · Esc ออก', W - 14, 17);
+      ? 'กดปุ่มทิศทางมุมล่างขวา หรือแตะช่องที่อยากไป'
+      : 'ปุ่มทิศทางมุมล่างขวา · ลูกศร/WASD · คลิกช่องที่อยากไป · Esc ออก', W - 14, 17);
     ctx.restore();
 
     if (S.msgT > 0) {
@@ -473,11 +595,11 @@
       ctx.globalAlpha = Math.min(1, S.msgT);
       ctx.fillStyle = 'rgba(10,14,22,.8)';
       const tw = ctx.measureText(S.msg).width;
-      ctx.fillRect(W / 2 - tw / 2 - 16, H - 52, tw + 32, 30);
+      ctx.fillRect(W / 2 - tw / 2 - 16, 44, tw + 32, 30);
       ctx.font = '14px system-ui, sans-serif';
       ctx.fillStyle = '#e8edf7';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(S.msg, W / 2, H - 37);
+      ctx.fillText(S.msg, W / 2, 59);
       ctx.restore();
     }
   }
@@ -499,10 +621,34 @@
     if (key === 'ArrowUp' || key === 'w' || key === 'W') k.up = false;
     if (key === 'ArrowDown' || key === 's' || key === 'S') k.down = false;
   }
-  function clearKeys() { S.keys = {}; }
+  function clearKeys() { S.keys = {}; S.padHeld = null; S.padVec = null; S.padOnce = null; }
+
+  // กดค้างที่ปุ่มทิศทาง
+  function press(x, y) {
+    if (S.encounter || !S.map) return false;
+    const b = padHit(x, y);
+    if (!b) return false;
+    S.padHeld = b.dir;
+    S.padVec = { dc: b.dc, dr: b.dr, face: b.face };
+    S.padOnce = null;
+    S.padUsed = false;
+    S.path = null;
+    S.dir = b.face;
+    // ยืนนิ่งอยู่ก็ขยับทันที ไม่ต้องรอเฟรมถัดไป
+    if (!S.moving) { S.padUsed = true; tryStep(b.dc, b.dr); }
+    return true;
+  }
+  function release() {
+    // ปล่อยนิ้วก่อนที่ปุ่มจะได้ทำงานสักครั้ง (แตะเร็ว ๆ หรือกดตอนกำลังก้าวอยู่)
+    // ให้ค้างคิวไว้หนึ่งก้าว จะได้ไม่มีอาการ "กดแล้วไม่ไปไหน"
+    if (S.padVec && !S.padUsed) S.padOnce = S.padVec;
+    S.padHeld = null; S.padVec = null;
+  }
 
   function click(x, y) {
     if (S.encounter || !S.map) return;
+    if (padHit(x, y)) return;          // แตะโดนปุ่มทิศทาง ไม่ใช่การสั่งเดินไปช่องนั้น
+    S.padOnce = null;
     const c = Math.floor(x / TILE), r = Math.floor(y / TILE);
     if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return;
     if (!walkable(S.map.grid[r][c])) { say('ตรงนั้นเดินไปไม่ได้'); return; }
@@ -519,9 +665,9 @@
 
   PTD.safari = {
     ZONES, W, H, TILE,
-    enter, update, draw, act, click, keyDown, keyUp, clearKeys, say,
-    unlockedZones, zoneById, poolOf,
-    catchChance, fleeChance,
+    enter, update, draw, act, click, press, release, keyDown, keyUp, clearKeys, say,
+    unlockedZones, zoneById, poolOf, rollWild, encounterWeight, evoStage, weightsOf,
+    catchChance, fleeChance, padButtons,
     get state() { return S; },
     get encounter() { return S.encounter; },
     set onEncounter(fn) { S.onEncounter = fn; }

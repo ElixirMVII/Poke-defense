@@ -31,7 +31,11 @@ fs.mkdirSync(path.join(DIST, 'sprites'), { recursive: true });
 /* ---------- 1. รวม CSS กับ JS เข้าไปในหน้าเดียว ---------- */
 let html = fs.readFileSync(path.join(REPO, 'index.html'), 'utf8');
 
-const css = fs.readFileSync(path.join(REPO, 'css/style.css'), 'utf8');
+// ฟอนต์โฮสต์เอง: ย้าย url(../fonts/x.woff2) ให้ชี้ที่ fonts/ ข้าง ๆ index.html
+const fontCss = fs.readFileSync(path.join(REPO, 'css/fonts.css'), 'utf8')
+  .replace(/url\(\.\.\/fonts\//g, 'url(fonts/');
+const css = fontCss + '\n' + fs.readFileSync(path.join(REPO, 'css/style.css'), 'utf8');
+html = html.replace('<link rel="stylesheet" href="css/fonts.css">', '');
 html = html.replace('<link rel="stylesheet" href="css/style.css">',
   '<style>\n' + css + '\n</style>');
 
@@ -67,7 +71,16 @@ html = html
 // ใส่ title กับ style กลับเข้าไปที่หัวไฟล์ตามที่หน้าเว็บที่เผยแพร่ต้องการ
 html = `<title>${title}</title>\n<style>\n${css}\n</style>\n\n` + html;
 
-/* ---------- 3. คัดลอกภาพนิ่ง ---------- */
+/* ---------- 3. คัดลอกไฟล์ฟอนต์ ---------- */
+fs.mkdirSync(path.join(DIST, 'fonts'), { recursive: true });
+let fontFiles = 0;
+for (const f of fs.readdirSync(path.join(REPO, 'fonts'))) {
+  if (!f.endsWith('.woff2')) continue;
+  fs.copyFileSync(path.join(REPO, 'fonts', f), path.join(DIST, 'fonts', f));
+  fontFiles++;
+}
+
+/* ---------- 4. คัดลอกภาพนิ่ง ---------- */
 let stills = 0;
 for (const id of [...Array(151).keys()].map(i => i + 1).concat(MEGA_IDS)) {
   const src = path.join(SRC, `${id}.png`);
@@ -76,7 +89,7 @@ for (const id of [...Array(151).keys()].map(i => i + 1).concat(MEGA_IDS)) {
   stills++;
 }
 
-/* ---------- 4. แพ็ก GIF เคลื่อนไหวเป็นไฟล์เดียว ---------- */
+/* ---------- 5. แพ็ก GIF เคลื่อนไหวเป็นไฟล์เดียว ---------- */
 // แนบไฟล์ได้จำกัดจำนวน จะแนบ GIF ทีละไฟล์ไม่ได้ เลยต่อกันแล้วทำดัชนีไว้
 const chunks = [];
 const index = {};
@@ -104,8 +117,10 @@ for (const f of fs.readdirSync(path.join(DIST, 'sprites')))
   spriteBytes += fs.statSync(path.join(DIST, 'sprites', f)).size;
 
 console.log('สร้าง dist/ เรียบร้อย');
-console.log('  index.html      ', kb(Buffer.byteLength(html)), `(รวม ${scripts.length} สคริปต์ + CSS)`);
+console.log('  index.html      ', kb(Buffer.byteLength(html)),
+  `(รวม ${scripts.length} สคริปต์ + CSS + ประกาศฟอนต์)`);
+console.log('  ฟอนต์            ', fontFiles, 'ไฟล์');
 console.log('  ภาพนิ่ง          ', stills, 'ไฟล์');
 console.log('  GIF ในแพ็ก      ', anims, 'ตัว,', mb(offset), '-> base64', mb(Math.ceil(offset * 4 / 3)));
 console.log('  รวมโฟลเดอร์รูป  ', mb(spriteBytes));
-console.log('  จำนวนไฟล์ทั้งหมด', 1 + stills + 2, '(ขีดจำกัด 255)');
+console.log('  จำนวนไฟล์ทั้งหมด', 1 + fontFiles + stills + 2, '(ขีดจำกัด 255)');

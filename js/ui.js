@@ -276,11 +276,13 @@
             <p class="lead">ออกไปจับโปเกม่อน จัดทีม 6 ตัว แล้วลงด่านป้องกัน</p>
           </div>
           <div class="party-mini">
-            <div class="pm-label">ทีมตอนนี้ (${party.length}/6)</div>
+            <div class="pm-head">
+              <span class="pm-label">ทีมตอนนี้ (${party.length}/6)</span>
+              <button class="nav sm" data-go="party">จัดทีม</button>
+            </div>
             <div class="pm-row">${party.length ? party.map(m =>
               `<div class="pm-slot" data-tip-mon="${m.id}">${sprite(m.id)}<span>Lv${m.lv}</span></div>`).join('')
               : '<div class="pm-empty">ยังไม่มีใครในทีม</div>'}</div>
-            <button class="nav" data-go="party">จัดทีม</button>
           </div>
         </div>
 
@@ -586,10 +588,10 @@
       <div id="detail" class="panel" hidden></div>
       <div id="preview" class="panel"></div>
       <div class="side-foot">${TOUCH
-        ? 'แตะตัวในทีมแล้วแตะบนสนามเพื่อวาง · แตะตัวที่วางแล้วเพื่อดูข้อมูลและสั่งวิวัฒนาการ/เมก้า'
+        ? 'แตะตัวในทีมแล้วแตะบนสนามเพื่อวาง · แตะตัวที่วางแล้วเพื่อดูข้อมูล ย้ายตำแหน่ง วิวัฒนาการ หรือเมก้า'
         : `<kbd>1-6</kbd> เลือกตัวในทีม · <kbd>Esc</kbd> ยกเลิก · <kbd>Space</kbd> พัก ·
            <kbd>X</kbd> เร่ง · <kbd>E</kbd> วิวัฒนาการ · <kbd>M</kbd> เมก้า ·
-           <kbd>C</kbd> ลูกอม · <kbd>R</kbd> เก็บกลับ`}
+           <kbd>C</kbd> ลูกอม · <kbd>V</kbd> ย้าย · <kbd>R</kbd> เก็บกลับ`}
       </div>`;
     refresh();
   }
@@ -727,6 +729,15 @@
     }
     cd.onclick = () => B.buyCandy();
     acts.appendChild(cd);
+
+    /* ย้ายตำแหน่ง */
+    const mv = document.createElement('button');
+    mv.className = 'big move' + (B.movingTower === t ? ' on' : '');
+    mv.innerHTML = B.movingTower === t
+      ? 'กำลังย้าย — แตะช่องใหม่<small>แตะปุ่มนี้อีกครั้งเพื่อยกเลิก</small>'
+      : '✥ ย้ายตำแหน่ง<small>แล้วแตะช่องที่ต้องการ · กด V</small>';
+    mv.onclick = () => (B.movingTower === t ? B.cancelMove() : B.startMove(t));
+    acts.appendChild(mv);
 
     /* เก็บกลับ */
     const rc = document.createElement('button');
