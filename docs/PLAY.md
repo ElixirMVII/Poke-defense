@@ -1,18 +1,17 @@
-# เปิดให้เล่นบนเว็บ (GitHub Pages)
+# เล่นบนเว็บ
 
-เกมเป็นไฟล์นิ่งล้วน ไม่ต้อง build ไม่ต้องมี workflow — เปิด Pages ชี้มาที่ branch ได้เลย
-
-1. เข้า **Settings** ของรีโปนี้
-2. เมนูซ้าย เลือก **Pages**
-3. หัวข้อ *Build and deployment* → **Source: Deploy from a branch**
-4. **Branch: `main`** · โฟลเดอร์ **`/ (root)`** → กด **Save**
-5. รอสักครู่ (ครั้งแรกประมาณ 1–2 นาที) จะได้ลิงก์
-
-```
-https://elixirmvii.github.io/Poke-defense/
-```
+**https://elixirmvii.github.io/Poke-defense/** — เปิดใช้งานแล้ว
 
 > ตัว `P` ใหญ่ใน path ด้วย — URL ของ Pages แยกตัวพิมพ์ใหญ่เล็ก
+
+## อัปเดตเว็บหลังแก้โค้ด
+
+เว็บเสิร์ฟจาก branch **`gh-pages`** ไม่ใช่ `main`
+
+```bash
+git push origin main
+git push origin main:gh-pages    # อันนี้คืออันที่ทำให้เว็บเปลี่ยน
+```
 
 ## เล่นบน iPad / iPhone
 
@@ -24,11 +23,17 @@ https://elixirmvii.github.io/Poke-defense/
 - **สนามรบ** — แตะตัวในทีม แล้วแตะบนสนามเพื่อวาง มีปุ่มยกเลิกให้กด
 - **ดูข้อมูลตัว** — แตะการ์ดในโปเกเด็กซ์เพื่อเปิดหน้าต่างข้อมูล
 
-## ทำไมไม่ใช้ GitHub Actions
+## ทำไมถึงใช้ branch ชื่อ gh-pages
 
-เคยลองใส่ workflow ที่เปิด Pages ให้อัตโนมัติแล้ว แต่ GITHUB_TOKEN ของรีโปนี้
-ไม่มีสิทธิ์สร้าง Pages site (`Resource not accessible by integration`)
-ซึ่งต้องไปเปิดสิทธิ์ที่ Settings อยู่ดี — เลยตัดออกเพราะจำนวนขั้นตอนเท่ากันแต่พังง่ายกว่า
+ตอนตั้งค่าครั้งแรก ลองมาสองทางแล้วไม่ผ่าน:
 
-ถ้าอยากใช้ Actions จริง ๆ: Settings → Actions → General → Workflow permissions
-เลือก **Read and write permissions** แล้วค่อยใส่ workflow กลับเข้าไป
+- **Actions workflow** ที่เรียก `actions/configure-pages` พร้อม `enablement: true`
+  → `Resource not accessible by integration` (GITHUB_TOKEN ไม่มีสิทธิ์สร้าง Pages site)
+- **เรียก REST API ตรง ๆ** `POST /repos/:owner/:repo/pages`
+  → ถูกบล็อกที่ชั้น proxy ไม่ได้ออกไปถึง GitHub ด้วยซ้ำ
+
+ทางที่ได้ผลคือ push branch ชื่อ `gh-pages` ขึ้นไป ซึ่ง GitHub จะเปิด Pages
+ให้อัตโนมัติเมื่อเจอ branch ชื่อนี้ครั้งแรก (พฤติกรรมเดิมที่ยังใช้ได้อยู่)
+
+ถ้าอยากย้ายไปเสิร์ฟจาก `main` แทน: Settings → Pages → เปลี่ยน Branch เป็น `main`
+แล้วลบ branch `gh-pages` ทิ้งได้เลย
