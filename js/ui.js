@@ -8,6 +8,10 @@
   const $ = (id) => document.getElementById(id);
   let app = null;
 
+  // iOS ยิง mousemove ปลอมตอนแตะ แล้วไม่มี mouseleave ตามมา
+  // ทูลทิปแบบ hover เลยค้างบนจอ — บนอุปกรณ์สัมผัสจึงใช้วิธีอื่นแทน
+  const TOUCH = typeof matchMedia === 'function' && matchMedia('(hover: none)').matches;
+
   const fmt = (n) => Math.round(n).toLocaleString('en-US');
   const dexNo = (id) => '#' + String(id).padStart(3, '0');
   const sprite = (id, cls) =>
@@ -30,10 +34,30 @@
   function hideTip() { if (tip) tip.style.display = 'none'; }
 
   function bindTips(root) {
+    if (TOUCH) {
+      // การ์ดที่ไม่มีการกระทำอื่น (เช่นในเด็กซ์) ให้แตะแล้วเปิดข้อมูลเต็ม
+      root.querySelectorAll('[data-tip-mon]').forEach(el => {
+        if (el.tagName === 'BUTTON' || el.closest('button')) return;
+        el.addEventListener('click', () => infoModal(Number(el.dataset.tipMon)));
+      });
+      return;
+    }
     root.querySelectorAll('[data-tip-mon]').forEach(el => {
       el.addEventListener('mousemove', (ev) => showTip(monTip(Number(el.dataset.tipMon)), ev));
       el.addEventListener('mouseleave', hideTip);
     });
+  }
+
+  // หน้าต่างข้อมูลสำหรับจอสัมผัส (แทนทูลทิปที่ใช้ไม่ได้)
+  function infoModal(speciesId) {
+    const m = $('modal');
+    m.hidden = false;
+    m.innerHTML = `<div class="enc-box info">
+        <div class="info-body">${monTip(speciesId)}</div>
+        <button class="ghost" id="infoClose">ปิด</button>
+      </div>`;
+    $('infoClose').onclick = closeModal;
+    m.addEventListener('click', (e) => { if (e.target === m) closeModal(); });
   }
 
   function effText(ef) {
@@ -467,7 +491,9 @@
     $('side').innerHTML = `
       <div class="panel">
         <h3 class="side-h">${zone.name}</h3>
-        <p class="side-note">เดินบนหญ้าสูงเพื่อหาโปเกม่อน ใช้ลูกศร/WASD หรือคลิกช่องที่อยากไป</p>
+        <p class="side-note">${TOUCH
+          ? 'แตะช่องที่อยากไป ตัวละครจะเดินไปเอง — เดินบนหญ้าสูงเพื่อหาโปเกม่อน'
+          : 'เดินบนหญ้าสูงเพื่อหาโปเกม่อน ใช้ลูกศร/WASD หรือคลิกช่องที่อยากไป'}</p>
         <div class="kv"><span>ลูกบอลที่เหลือ</span><b id="ballsLeft">${s.balls}</b></div>
         <div class="kv"><span>เลเวลที่เจอได้</span><b>${zone.lv[0]}–${zone.lv[1]}</b></div>
         <div class="kv"><span>จับครบแล้ว</span><b>${pool.filter(i => s.data.caught.includes(i)).length}/${pool.length}</b></div>
@@ -559,10 +585,11 @@
     $('side').innerHTML = `<div id="rosterPanel" class="panel"></div>
       <div id="detail" class="panel" hidden></div>
       <div id="preview" class="panel"></div>
-      <div class="side-foot">
-        <kbd>1-6</kbd> เลือกตัวในทีม · <kbd>Esc</kbd> ยกเลิก · <kbd>Space</kbd> พัก ·
-        <kbd>X</kbd> เร่ง · <kbd>E</kbd> วิวัฒนาการ · <kbd>M</kbd> เมก้า ·
-        <kbd>C</kbd> ลูกอม · <kbd>R</kbd> เก็บกลับ
+      <div class="side-foot">${TOUCH
+        ? 'แตะตัวในทีมแล้วแตะบนสนามเพื่อวาง · แตะตัวที่วางแล้วเพื่อดูข้อมูลและสั่งวิวัฒนาการ/เมก้า'
+        : `<kbd>1-6</kbd> เลือกตัวในทีม · <kbd>Esc</kbd> ยกเลิก · <kbd>Space</kbd> พัก ·
+           <kbd>X</kbd> เร่ง · <kbd>E</kbd> วิวัฒนาการ · <kbd>M</kbd> เมก้า ·
+           <kbd>C</kbd> ลูกอม · <kbd>R</kbd> เก็บกลับ`}
       </div>`;
     refresh();
   }
@@ -573,6 +600,8 @@
     if (!box) return;
     box.innerHTML = `<h3 class="side-h">ทีมของคุณ <small>${
       B.roster.filter(s => s.placed).length}/${B.roster.length} ลงสนามแล้ว</small></h3>
+      ${B.placing ? `<button id="btnCancelPlace" class="cancelplace">
+        แตะบนสนามเพื่อวาง · ยกเลิก ✕</button>` : ''}
       <div class="roster">${B.roster.map((s, i) => {
         const t = PTD.tower(s.mon.id);
         const placed = s.placed;
@@ -585,6 +614,8 @@
           ${placed ? '<div class="rmon-tag">ลงสนามแล้ว</div>' : ''}
         </button>`;
       }).join('')}</div>`;
+    const cp = $('btnCancelPlace');
+    if (cp) cp.onclick = () => { B.placing = null; refresh(); };
     box.querySelectorAll('[data-uid]').forEach(b => b.addEventListener('click', () => {
       const uid = Number(b.dataset.uid);
       const slot = B.slotOf(uid);
@@ -886,7 +917,7 @@
   }
 
   PTD.ui = {
-    init, syncHud, showWorld, showParty, showDex, showStarter, showCanvas,
+    TOUCH, infoModal, init, syncHud, showWorld, showParty, showDex, showStarter, showCanvas,
     refresh, tick, showEnd, showEncounter, closeModal, modalOpen, toast,
     buildSafariSide
   };

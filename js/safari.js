@@ -463,7 +463,9 @@
     ctx.fillText(`เลเวลที่เจอ ${S.zone.lv[0]}–${S.zone.lv[1]}`, 280, 17);
     ctx.fillStyle = '#93a0bd';
     ctx.textAlign = 'right';
-    ctx.fillText('ลูกศร/WASD เดิน · คลิกเพื่อเดินไปจุดนั้น · Esc ออก', W - 14, 17);
+    ctx.fillText(PTD.ui && PTD.ui.TOUCH
+      ? 'แตะช่องที่อยากไป'
+      : 'ลูกศร/WASD เดิน · คลิกเพื่อเดินไปจุดนั้น · Esc ออก', W - 14, 17);
     ctx.restore();
 
     if (S.msgT > 0) {
