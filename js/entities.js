@@ -86,16 +86,16 @@
 
   /* =================== ศัตรู =================== */
   class Enemy {
-    constructor(defId, hpMul, G) {
-      const def = PTD.ENEMIES[defId];
+    // spec มาจากตารางเวฟ: { id, boss, aura }
+    constructor(spec, hpMul, G) {
+      const def = PTD.enemy(spec.id, { boss: spec.boss, aura: spec.aura, bossX: spec.bossX });
       this.def = def;
-      // บอสตั้งค่าพลังชีวิตเองในตาราง ไม่คูณตัวคูณของเวฟซ้ำ ไม่งั้นบวมเกินจริง
-      this.maxHp = Math.round(def.hp * (def.boss ? 1 : hpMul));
+      this.maxHp = Math.round(def.hp * hpMul);
       this.hp = this.maxHp;
       this.baseSpeed = def.speed;
       this.armor = def.armor || 0;
       // เวฟหลัง ๆ ศัตรูอึดขึ้น ค่าหัวก็ต้องขึ้นตาม ไม่งั้นเศรษฐกิจตามไม่ทัน
-      this.bounty = Math.round(def.bounty * (0.65 + 0.35 * hpMul));
+      this.bounty = Math.round(def.bounty * (0.65 + 0.35 * Math.min(hpMul, 8)));
       this.dist = 0;
       this.x = M.WAYPOINTS[0].x; this.y = M.WAYPOINTS[0].y;
       this.facing = 1;
@@ -104,7 +104,7 @@
       this.slows = [];     // {until, power}
       this.dots = [];      // {until, dps, type, tick}
       this.stunUntil = 0;
-      this.size = 34 * (def.scale || 1);
+      this.size = 54 * (def.scale || 1);
       this.G = G;
       this.spawnAnim = .35;
     }
@@ -154,10 +154,11 @@
       let alpha = 1;
       if (this.spawnAnim > 0) alpha = clamp(1 - this.spawnAnim / .35, .15, 1);
 
-      const spec = this.def.sprite;
-      PTD.drawCreature(ctx, spec, this.x, this.y, this.size, t, {
-        facing: this.facing, flash: this.flash, alpha,
-        glow: this.def.glow || null
+      PTD.sprites.draw(ctx, this.def.dexId, this.x, this.y, this.size, t, {
+        flash: this.flash, alpha,
+        glow: this.def.glow || null,
+        phase: (this.def.dexId * 137) % 900,
+        tint: PTD.TYPE_COLOR[this.def.types[0]]
       });
 
       // ไอคอนสถานะ
@@ -182,10 +183,12 @@
         ctx.restore();
       }
 
-      // แถบเลือด
+      // แถบเลือด — วางเหนือหัวจริงของสไปรท์ (แต่ละตัวสูงไม่เท่ากัน)
+      const m = PTD.sprites.metrics(this.def.dexId, this.size, 1);
+      const topY = this.y + this.size * .40 - m.h;
       if (this.hp < this.maxHp) {
-        const w = Math.max(24, this.size * .85), h = this.def.boss ? 6 : 4;
-        const x = this.x - w / 2, y = this.y - this.size * .62;
+        const w = Math.max(26, m.w * .9), h = this.def.boss ? 6 : 4;
+        const x = this.x - w / 2, y = topY - 7;
         ctx.save();
         ctx.fillStyle = 'rgba(0,0,0,.55)';
         ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
@@ -198,8 +201,8 @@
         ctx.save();
         ctx.font = 'bold 10px system-ui, sans-serif'; ctx.textAlign = 'center';
         ctx.fillStyle = '#ffe37a'; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.lineWidth = 3;
-        ctx.strokeText(this.def.name, this.x, this.y - this.size * .72);
-        ctx.fillText(this.def.name, this.x, this.y - this.size * .72);
+        ctx.strokeText(this.def.name, this.x, topY - 14);
+        ctx.fillText(this.def.name, this.x, topY - 14);
         ctx.restore();
       }
     }
@@ -211,7 +214,7 @@
         const ph = (t * 2 + i * .5) % 1;
         ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.arc(this.x + side * this.size * .3, this.y - this.size * .2 - ph * 16, 3 * (1 - ph) + 1, 0, TAU);
+        ctx.arc(this.x + side * this.size * .26, this.y - ph * 16, 3 * (1 - ph) + 1, 0, TAU);
         ctx.fill();
       }
       ctx.restore();
@@ -270,7 +273,7 @@
 
   class Tower {
     constructor(defId, c, r, G) {
-      this.def = PTD.TOWERS[defId];
+      this.def = PTD.tower(defId);
       this.c = c; this.r = r;
       const p = M.centerOf(c, r);
       this.x = p.x; this.y = p.y;
@@ -293,12 +296,12 @@
     get dps() { return this.dmg * this.rate * (this.def.targets || 1); }
     get expNext() { return expNeeded(this.level); }
     get sellValue() { return Math.floor(this.invested * .7); }
-    get canEvolve() { return !!this.def.evolveTo && this.level >= this.def.evolveLv; }
+    get canEvolve() { return this.def.evolveTo.length > 0 && this.level >= this.def.evolveLv; }
 
     gainExp(amount) {
       this.exp += amount;
       let leveled = false;
-      while (this.exp >= this.expNext && this.level < 20) {
+      while (this.exp >= this.expNext && this.level < PTD.MAX_LEVEL) {
         this.exp -= this.expNext; this.level++; leveled = true;
       }
       if (leveled) {
@@ -311,8 +314,10 @@
       }
     }
 
-    evolve() {
-      const next = PTD.TOWERS[this.def.evolveTo];
+    // choice = index ของร่างที่เลือก (Eevee มีสามทาง)
+    evolve(choice) {
+      const nextId = this.def.evolveTo[choice || 0];
+      const next = PTD.tower(nextId);
       this.invested += this.def.evolveCost;
       this.def = next;
       this.exp = 0;
@@ -502,7 +507,10 @@
       }
 
       const kick = this.recoil > 0 ? this.recoil * 3 : 0;
-      PTD.drawCreature(ctx, d.sprite, this.x - this.facing * kick, this.y - 4, 40, t, { facing: this.facing });
+      PTD.sprites.draw(ctx, d.dexId, this.x - this.facing * kick, this.y - 3, 54, t, {
+        phase: (d.dexId * 211) % 900,
+        tint: PTD.TYPE_COLOR[d.types[0]]
+      });
 
       // ดาวบอกเลเวล
       if (this.level > 1) {

@@ -12,7 +12,7 @@
   const START_LIVES = 25;
   const ARMOR_K = 60;             // เกราะลดดาเมจแบบสัดส่วน: dmg * K/(K+armor)
   const MAX_TEAM = 12;            // ทีมเริ่มต้นมีได้กี่ตัว
-  const EXTRA_SLOTS = 6;          // ซื้อเพิ่มได้อีกกี่ช่อง
+  const EXTRA_SLOTS = 8;          // ซื้อเพิ่มได้อีกกี่ช่อง
   const SLOT_COST = (n) => Math.round(900 * Math.pow(1.7, n));
   const CANDY_COST = (lv) => Math.round(50 + 12 * Math.pow(lv, 1.7));
   const BREAK_TIME = 10;          // วินาทีพักระหว่างเวฟ
@@ -49,7 +49,7 @@
       let m = 1;
       for (const e of this.auraEnemies) {
         if (e.def.aura !== 'drain') continue;
-        if (Math.hypot(e.x - tower.x, e.y - tower.y) < 170) m *= .6;
+        if (Math.hypot(e.x - tower.x, e.y - tower.y) < 150) m *= .78;
       }
       return m;
     },
@@ -57,7 +57,7 @@
       let m = 1;
       for (const e of this.auraEnemies) {
         if (e.def.aura !== 'chill') continue;
-        if (Math.hypot(e.x - tower.x, e.y - tower.y) < 150) m *= .6;
+        if (Math.hypot(e.x - tower.x, e.y - tower.y) < 140) m *= .78;
       }
       return m;
     },
@@ -155,7 +155,7 @@
     tryPlace(c, r) {
       const id = this.placing;
       if (!id) return false;
-      const def = PTD.TOWERS[id];
+      const def = PTD.tower(id);
       if (!M.buildable(c, r)) { PTD.sfx.deny(); this.setBanner('วางตรงนี้ไม่ได้', '#ff8a8a'); return false; }
       if (this.towerAt(c, r)) { PTD.sfx.deny(); this.setBanner('ช่องนี้มีโปเกม่อนอยู่แล้ว', '#ff8a8a'); return false; }
       if (this.towers.length >= this.teamCap) {
@@ -195,7 +195,7 @@
     buyCandy() {
       const t = this.selected;
       if (!t) return;
-      if (t.level >= 20) { PTD.sfx.deny(); this.setBanner('เลเวลสูงสุดแล้ว', '#ff8a8a'); return; }
+      if (t.level >= PTD.MAX_LEVEL) { PTD.sfx.deny(); this.setBanner('เลเวลสูงสุดแล้ว', '#ff8a8a'); return; }
       const cost = CANDY_COST(t.level);
       if (this.money < cost) { PTD.sfx.deny(); this.setBanner('เงินไม่พอ', '#ff8a8a'); return; }
       this.money -= cost;
@@ -217,12 +217,12 @@
       PTD.ui.refresh();
     },
 
-    evolveSelected() {
+    evolveSelected(choice) {
       const t = this.selected;
       if (!t || !t.canEvolve) { PTD.sfx.deny(); return; }
       if (this.money < t.def.evolveCost) { PTD.sfx.deny(); this.setBanner('เงินไม่พอสำหรับวิวัฒนาการ', '#ff8a8a'); return; }
       this.money -= t.def.evolveCost;
-      t.evolve();
+      t.evolve(choice || 0);
       PTD.ui.refresh();
     },
 
@@ -239,13 +239,16 @@
       this.spawnQueue = [];
       for (const g of w.groups) {
         for (let i = 0; i < g.count; i++) {
-          this.spawnQueue.push({ id: g.id, at: g.delay + i * g.gap });
+          this.spawnQueue.push({
+            id: g.id, boss: !!g.boss, aura: g.aura || null, bossX: g.bossX || 0,
+            at: g.delay + i * g.gap
+          });
         }
       }
       this.spawnQueue.sort((a, b) => a.at - b.at);
       this.waveTime = 0;
       this.state = 'wave';
-      const hasBoss = w.groups.some(g => PTD.ENEMIES[g.id].boss);
+      const hasBoss = w.groups.some(g => g.boss);
       if (hasBoss) { PTD.sfx.boss(); this.setBanner('⚠ เวฟ ' + (this.waveIndex + 1) + ' — บอส!', '#ff7a7a'); }
       else { PTD.sfx.waveStart(); this.setBanner('เวฟ ' + (this.waveIndex + 1) + ' เริ่มแล้ว', '#a8ffb0'); }
       PTD.ui.refresh();
@@ -263,7 +266,7 @@
       const hpMul = PTD.WAVES[this.waveIndex].hpMul;
       while (this.spawnQueue.length && this.spawnQueue[0].at <= this.waveTime) {
         const s = this.spawnQueue.shift();
-        this.enemies.push(new PTD.Enemy(s.id, hpMul, this));
+        this.enemies.push(new PTD.Enemy(s, hpMul, this));
       }
 
       if (!this.spawnQueue.length && !this.enemies.length) {
@@ -343,7 +346,7 @@
       // ไฮไลต์ช่องที่กำลังจะวาง
       if (this.placing) {
         const { c, r } = this.hover;
-        const def = PTD.TOWERS[this.placing];
+        const def = PTD.tower(this.placing);
         if (c >= 0 && c < M.COLS && r >= 0 && r < M.ROWS) {
           const ok = M.buildable(c, r) && !this.towerAt(c, r) && this.money >= def.cost;
           const p = M.centerOf(c, r);
@@ -366,7 +369,8 @@
           // ตัวอย่างโปเกม่อน
           ctx.save();
           ctx.globalAlpha = .75;
-          PTD.drawCreature(ctx, def.sprite, p.x, p.y - 4, 40, this.time, {});
+          PTD.sprites.draw(ctx, def.dexId, p.x, p.y - 3, 54, this.time,
+            { tint: PTD.TYPE_COLOR[def.types[0]] });
           ctx.restore();
         }
       }
@@ -493,12 +497,10 @@
           G.speed = G.speed === 1 ? 2 : (G.speed === 2 ? 3 : 1);
           PTD.ui.refresh(); break;
       }
-      if (/^[1-9]$/.test(ev.key)) {
-        const id = PTD.SHOP_ORDER[parseInt(ev.key, 10) - 1];
-        if (id) { G.placing = id; G.selected = null; PTD.ui.refresh(); }
-      }
-      if (ev.key === '0') {
-        const id = PTD.SHOP_ORDER[9];
+      if (/^[0-9]$/.test(ev.key)) {
+        const list = PTD.ui.visibleIds || [];
+        const idx = ev.key === '0' ? 9 : parseInt(ev.key, 10) - 1;
+        const id = list[idx];
         if (id) { G.placing = id; G.selected = null; PTD.ui.refresh(); }
       }
     });

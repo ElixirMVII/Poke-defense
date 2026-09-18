@@ -1,31 +1,32 @@
 <!DOCTYPE html><html lang="th"><head><meta charset="utf-8">
-<title>Poke Defense — Gallery</title>
+<title>Poke Defense — Pokédex Gen 1</title>
 <style>
  body{background:#141b2a;color:#e8edf7;font-family:system-ui,sans-serif;margin:0;padding:24px}
  h2{font-size:15px;margin:22px 0 10px;color:#ffd54a}
- .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:10px}
- .cell{background:#1d2740;border:1px solid #2e3a55;border-radius:10px;padding:8px;text-align:center}
- .cell canvas{display:block;margin:0 auto;background:radial-gradient(circle at 50% 60%,#2a3852,#1d2740)}
- .n{font-size:11px;margin-top:5px}.t{font-size:9px;color:#93a0bd}
+ .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
+ .cell{background:#1d2740;border:1px solid #2e3a55;border-radius:10px;padding:8px 4px;text-align:center}
+ .cell img{width:64px;height:64px;image-rendering:pixelated;object-fit:contain;display:block;margin:0 auto}
+ .n{font-size:11px;margin-top:4px;font-weight:700}
+ .no{font-size:9px;color:#6d7b96}
+ .t{font-size:9px;color:#93a0bd}
+ .s{font-size:9px;color:#ffd54a;margin-top:2px}
 </style></head><body>
-<h2>ป้อม (โปเกม่อนของผู้เล่น)</h2><div class="grid" id="towers"></div>
-<h2>ศัตรู</h2><div class="grid" id="enemies"></div>
-<h2>บอส</h2><div class="grid" id="bosses"></div>
-<script src="../js/types.js"></script><script src="../js/sprites.js"></script>
-<script src="../js/pokedex.js"></script>
+<h2 id="h">Pokédex Gen 1 — 151 ตัว</h2>
+<div class="grid" id="all"></div>
+<script src="../js/types.js"></script><script src="../js/gen1.js"></script>
+<script src="../js/derive.js"></script><script src="../js/sprites.js"></script>
 <script>
-function add(box, def, px){
-  const d=document.createElement('div'); d.className='cell';
-  const c=document.createElement('canvas'); c.width=c.height=px;
-  const g=c.getContext('2d');
-  PTD.drawCreature(g, def.sprite, px/2, px/2+px*.05, px*.72, .4, {});
-  d.appendChild(c);
-  const n=document.createElement('div'); n.className='n'; n.textContent=def.name; d.appendChild(n);
-  const t=document.createElement('div'); t.className='t';
-  t.textContent=def.types.map(x=>PTD.TYPE_TH[x]).join('/'); d.appendChild(t);
-  box.appendChild(d);
+const box=document.getElementById('all');
+for(const d of PTD.DEX){
+  const t=PTD.tower(d.id);
+  const c=document.createElement('div'); c.className='cell';
+  c.innerHTML=`<img src="${PTD.sprites.stillURL(d.id)}" alt="" loading="lazy">
+    <div class="n">${d.n}</div>
+    <div class="no">#${String(d.id).padStart(3,'0')} · BST ${d.bst}</div>
+    <div class="t">${d.t.map(x=>PTD.TYPE_TH[x]).join('/')}</div>
+    <div class="s">₽${t.cost} · ${Math.round(t.dmg*t.rate)} dps</div>`;
+  box.appendChild(c);
 }
-for(const k in PTD.TOWERS) add(document.getElementById('towers'), PTD.TOWERS[k], 96);
-for(const k in PTD.ENEMIES){const e=PTD.ENEMIES[k];
-  add(document.getElementById(e.boss?'bosses':'enemies'), e, e.boss?120:96);}
+document.getElementById('h').textContent =
+  `Pokédex Gen 1 — ${PTD.DEX.length} ตัว (ซื้อได้ ${PTD.BASE_FORMS.length} ตัว)`;
 </script></body></html>
