@@ -741,7 +741,8 @@ button.big { padding: 12px; font-size: 15px; margin-top: 10px; }
 
 /* ---------------- หน้าผู้ดูแล ---------------- */
 button.nav.adm { background: var(--shell); color: #fff; border-color: var(--shell-dark); }
-button.icon.who { background: var(--lens); color: #fff; font-family: var(--font-pixel); }
+/* ฟอนต์พิกเซลไม่มีอักษรไทย ปุ่มชื่อย่อจึงต้องใช้ฟอนต์ปกติ */
+button.icon.who { background: var(--lens); color: #fff; font-weight: 700; font-size: 15px; }
 .adm-tabs { display: flex; gap: 6px; margin: 4px 0 18px; }
 .adm-tab { padding: 9px 18px; font-size: 13px; }
 .adm-tab.on { background: var(--shell); color: #fff; border-color: var(--shell-dark); }
@@ -791,4 +792,90 @@ button.mini.danger { background: #f0d8d4; border-color: var(--danger); color: va
 @media (max-width: 760px) {
   .adm-table th:nth-child(4), .adm-table td:nth-child(4),
   .adm-table th:nth-child(5), .adm-table td:nth-child(5) { display: none; }
+}
+
+/* ---------------- โปเกบอล ----------------
+ * วาดด้วย CSS ล้วน จะได้คมทุกขนาดและเปลี่ยนสีตามชนิดบอลได้
+ * โครง: ครึ่งบนแดง / แถบดำกลาง / ครึ่งล่างขาว / ปุ่มขาวขอบดำตรงกลาง */
+.pokeball {
+  --pb: 20px;
+  --pb-top: #ee3d34;
+  width: var(--pb); height: var(--pb);
+  flex: none; display: inline-block; position: relative;
+  box-sizing: border-box; border-radius: 50%;
+  border: max(1px, calc(var(--pb) * .075)) solid #1b1b1b;
+  background: linear-gradient(
+    var(--pb-top) 0 calc(50% - 7%),
+    #1b1b1b       calc(50% - 7%) calc(50% + 7%),
+    #f7f7f7       calc(50% + 7%) 100%);
+  vertical-align: -.14em;
+}
+/* ปุ่มกลาง */
+.pokeball::after {
+  content: ''; position: absolute; inset: 0; margin: auto;
+  width: 34%; height: 34%; border-radius: 50%;
+  background: #f7f7f7;
+  border: max(1px, calc(var(--pb) * .07)) solid #1b1b1b;
+  box-sizing: border-box;
+}
+/* แสงสะท้อนบนครึ่งบน */
+.pokeball::before {
+  content: ''; position: absolute; left: 14%; top: 11%;
+  width: 30%; height: 20%; border-radius: 50%;
+  background: rgba(255,255,255,.5);
+  transform: rotate(-24deg);
+}
+.pokeball.sm  { --pb: 14px; }
+.pokeball.lg  { --pb: 30px; }
+.pokeball.xl  { --pb: 52px; }
+.pokeball.dim { opacity: .28; filter: grayscale(1); }
+/* ชนิดอื่น ๆ เผื่อใช้ทีหลัง */
+.pokeball.great { --pb-top: #2f7fd6; }
+.pokeball.ultra { --pb-top: #e8b21f; }
+
+/* ป้ายบอกว่าจับตัวนี้ได้แล้ว — วางมุมการ์ด เหมือนไอคอนในเด็กซ์ของเกมจริง */
+.caught-mark {
+  position: absolute; right: 3px; top: 3px; z-index: 2;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,.35));
+}
+
+/* ---------------- หน่วยท้ายตัวเลข ----------------
+ * ฟอนต์พิกเซล Silkscreen วาด % หนามากจนอ่านเป็นเลข 2
+ * เลยให้เฉพาะตัวเลขใช้ฟอนต์พิกเซล ส่วนหน่วยใช้ฟอนต์ปกติที่เล็กกว่า */
+.u {
+  font-family: var(--font-body); font-style: normal; font-weight: 700;
+  font-size: .62em; margin-left: .12em; opacity: .85;
+  letter-spacing: 0; vertical-align: .08em;
+}
+
+/* ป้ายบอลเล็กบนแถบตัวอย่างในแผนที่โลก */
+.zs { position: relative; display: inline-block; line-height: 0; }
+.zs-ball { --pb: 10px; position: absolute; right: -2px; bottom: -2px; }
+.enc-owned { font-size: 10.5px; color: var(--good); font-weight: 700; }
+/* ปุ่มขว้างบอลคือการกระทำหลัก ให้กินเต็มแถวและเด่นกว่าปุ่มอื่น */
+.enc-acts .throw {
+  grid-column: 1 / -1; padding: 13px; font-size: 15px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  background: linear-gradient(180deg, #f3ece0, var(--paper-2));
+  border-color: var(--shell); border-width: 3px;
+}
+.enc-acts .throw .pokeball { --pb: 22px; }
+.dex-cell { position: relative; }
+
+/* บอลที่แทรกกลางบรรทัดข้อความต้องมีที่หายใจ */
+.enc-no .pokeball { margin: 0 4px 0 6px; }
+.pv-name .pokeball { margin-left: 4px; }
+.zl .pokeball { margin-left: 2px; }
+/* กล่องบันทึกเหตุการณ์สูงตามเนื้อหา ไม่ต้องจองที่ว่างไว้ */
+.enc-log { min-height: 0; }
+.enc-log div + div { opacity: .6; font-size: 11px; }
+.pv-idle {
+  margin-top: 6px; font-size: 11px; line-height: 1.5;
+  background: #fff3d6; color: #6b4a08;
+  border-left: 4px solid var(--gold); border-radius: var(--r-sm);
+  padding: 6px 9px;
+}
+:root[data-theme="dark"] .pv-idle { background: #3a3218; color: #ffd98a; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .pv-idle { background: #3a3218; color: #ffd98a; }
 }

@@ -72,6 +72,7 @@
 
     /* ---------- คิดดาเมจ ---------- */
     damage(enemy, amount, moveType, tower, opts) {
+      if (tower) tower.lastHitAt = this.time;
       if (enemy.dead) return 0;
       opts = opts || {};
       const eff = PTD.effectiveness(moveType, enemy.def.types);
@@ -250,6 +251,16 @@
     set RECALL_REFUND(v) { RECALL_REFUND = Math.max(0, Math.min(1, v)); },
     get EXP_LEVELS_PER_STAGE() { return EXP_LEVELS_PER_STAGE; },
     set EXP_LEVELS_PER_STAGE(v) { EXP_LEVELS_PER_STAGE = Math.max(0, Math.round(v)); },
+
+    /* ป้อมที่ยิงไม่ถึงใครเลยคือเงินที่จมไปเปล่า ๆ แต่เกมไม่เคยบอก
+     * (ตอนรีวิวเจอ Charizard Lv18 ยืน 6 วินาทีแล้ว ดาเมจรวม 0 โดยไม่มีสัญญาณอะไร) */
+    IDLE_AFTER: 7,
+    isIdle(t) {
+      if (this.state !== 'wave') return false;
+      const since = t.lastHitAt < 0 ? t.placedAt : t.lastHitAt;
+      return this.time - since > this.IDLE_AFTER;
+    },
+    idleCount() { return this.towers.filter(t => this.isIdle(t)).length; },
 
     deployCost(mon) {
       const d = PTD.tower(mon.id);
@@ -490,6 +501,27 @@
       }
     },
 
+    // เครื่องหมายเตือนเหนือป้อมที่ยิงไม่โดนใครเลย
+    drawIdleMarks(ctx) {
+      for (const t of this.towers) {
+        if (!this.isIdle(t)) continue;
+        const bob = Math.sin(this.time * 4) * 2;
+        const x = t.x, y = t.y - 46 + bob;   // ให้ลอยเหนือหัวสไปรท์ ไม่ทับตัว
+        ctx.save();
+        ctx.globalAlpha = .9;
+        ctx.fillStyle = '#e8b21f';
+        ctx.beginPath();
+        ctx.moveTo(x, y - 10); ctx.lineTo(x + 9, y + 6); ctx.lineTo(x - 9, y + 6);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#6b4a08'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.fillStyle = '#3a2a04';
+        ctx.font = 'bold 11px system-ui, sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('!', x, y + 1);
+        ctx.restore();
+      }
+    },
+
     draw(ctx) {
       ctx.save();
       if (this.shake > 0) {
@@ -581,6 +613,8 @@
         ctx.fillText(this.banner.text, M.W / 2, 72);
         ctx.restore();
       }
+
+      this.drawIdleMarks(ctx);
 
       if (this.paused && this.state !== 'won' && this.state !== 'lost') {
         ctx.save();

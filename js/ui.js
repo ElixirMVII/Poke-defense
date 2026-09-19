@@ -18,6 +18,12 @@
     `<img class="psprite ${cls || ''}" src="${PTD.sprites.stillURL(id)}" alt="" loading="lazy">`;
   const badge = (t) =>
     `<span class="tbadge" style="background:${PTD.TYPE_COLOR[t]}">${PTD.TYPE_TH[t]}</span>`;
+  // ฟอนต์พิกเซลวาด % หนาจนอ่านเป็นเลข 2 — แยกหน่วยออกมาใช้ฟอนต์ปกติ
+  const pct = (n) => `${Math.round(n)}<i class="u">%</i>`;
+  const ball = (cls) => `<span class="pokeball ${cls || ''}"></span>`;
+  // ป้ายโปเกบอลบนตัวที่จับได้แล้ว เหมือนไอคอนในเด็กซ์ของเกมจริง
+  const caughtMark = (id) =>
+    PTD.save.data.caught.includes(id) ? '<span class="pokeball sm caught-mark"></span>' : '';
 
   /* ---------------- ทูลทิป ---------------- */
   let tip = null;
@@ -128,7 +134,7 @@
     if (sc !== 'starter' && sc !== 'login') {
       stats.push(`<div class="stat money"><span class="ico">₽</span><b id="money">${fmt(
         sc === 'battle' ? PTD.battle.money : s.money)}</b></div>`);
-      stats.push(`<div class="stat"><span class="ico">⚪</span><b id="balls">${s.balls}</b></div>`);
+      stats.push(`<div class="stat"><span class="pokeball sm"></span><b id="balls">${s.balls}</b></div>`);
       if (sc === 'battle') {
         stats.push(`<div class="stat heart"><span class="ico">❤</span><b id="lives">${PTD.battle.lives}</b></div>`);
         stats.push(`<div class="stat"><span class="lbl">เวฟ</span><b id="wave">–</b></div>`);
@@ -339,9 +345,13 @@
         <div class="loc-desc">${unlocked ? `เจอได้ ${pool.length} สายพันธุ์ · เลเวล ${zone.lv[0]}–${zone.lv[1]}`
                                          : `ต้องผ่านด่านที่ ${zone.need} ก่อน`}</div>
         ${unlocked ? `<div class="loc-meta">จับแล้ว ${caught}/${pool.length}</div>
-          <div class="zone-strip">${pool.slice(0, 8).map(id =>
-            `<img class="psprite tiny ${s.data.caught.includes(id) ? '' : 'unknown'}"
-                  src="${PTD.sprites.stillURL(id)}" alt="">`).join('')}</div>` : ''}
+          <div class="zone-strip">${pool.slice(0, 8).map(id => {
+            const got = s.data.caught.includes(id);
+            return `<span class="zs ${got ? 'got' : ''}">
+              <img class="psprite tiny ${got ? '' : 'unknown'}"
+                   src="${PTD.sprites.stillURL(id)}" alt="">
+              ${got ? '<span class="pokeball zs-ball"></span>' : ''}</span>`;
+          }).join('')}</div>` : ''}
       </button>`;
     }).join('');
 
@@ -395,7 +405,7 @@
         <h2 class="sec">ร้านค้า</h2>
         <div class="shop-row">
           <button class="shopitem" data-buy="balls">
-            <div class="si-icon">⚪</div>
+            <div class="si-icon">${ball('lg')}</div>
             <div class="si-name">ลูกบอลซาฟารี ×10</div>
             <div class="si-desc">ไว้จับโปเกม่อนในโซนซาฟารี</div>
             <div class="si-price">₽${fmt(PTD.save.PRICES.balls)}</div>
@@ -567,6 +577,7 @@
       const seen = caught || s.data.seen.includes(d.id);
       return `<div class="dex-cell ${caught ? 'caught' : seen ? 'seen' : 'unknown'}"
                 ${seen ? `data-tip-mon="${d.id}"` : ''}>
+        ${caughtMark(d.id)}
         ${sprite(d.id, seen ? '' : 'unknown')}
         <div class="dex-no">${dexNo(d.id)}</div>
         <div class="dex-name">${seen ? d.n : '???'}</div>
@@ -610,7 +621,7 @@
             <img class="psprite tiny ${s.data.caught.includes(id) ? '' : 'unknown'}"
                  src="${PTD.sprites.stillURL(id)}" alt="">
             <span>${s.data.seen.includes(id) ? PTD.dex(id).n : '???'}</span>
-            ${s.data.caught.includes(id) ? '<b>✓</b>' : ''}
+            ${s.data.caught.includes(id) ? ball('sm') : ''}
           </div>`).join('')}</div>
       </div>`;
     bindTips($('side'));
@@ -641,19 +652,22 @@
           <img class="psprite enc-sprite" src="${PTD.sprites.stillURL(enc.id)}" alt="">
           <div>
             <div class="enc-name">${d.n} <span class="enc-lv">Lv.${enc.lv}</span></div>
-            <div class="enc-no">${dexNo(d.id)} · ${d.jp}</div>
+            <div class="enc-no">${dexNo(d.id)} · ${d.jp}
+              ${PTD.save.data.caught.includes(d.id)
+                ? `${ball('sm')} <span class="enc-owned">จับได้แล้ว</span>` : ''}</div>
             <div class="enc-types">${t.types.map(badge).join('')}</div>
             <div class="enc-mood">อารมณ์: <b>${mood}</b></div>
           </div>
         </div>
         <div class="enc-odds">
-          <div class="odd good"><span>โอกาสจับ</span><b>${chance}%</b></div>
-          <div class="odd bad"><span>โอกาสหนี</span><b>${flee}%</b></div>
+          <div class="odd good"><span>โอกาสจับ</span><b>${pct(chance)}</b></div>
+          <div class="odd bad"><span>โอกาสหนี</span><b>${pct(flee)}</b></div>
           <div class="odd"><span>ลูกบอล</span><b>${balls}</b></div>
         </div>
         <div class="enc-log">${encLog.map(l => `<div>${l}</div>`).join('')}</div>
         <div class="enc-acts">
-          <button data-act="ball" ${balls <= 0 ? 'disabled' : ''}>⚪ ขว้างบอล</button>
+          <button data-act="ball" class="throw" ${balls <= 0 ? 'disabled' : ''}>
+            ${ball()} ขว้างบอล</button>
           <button data-act="bait">🍎 โยนเหยื่อ<small>หนียาก แต่จับยาก</small></button>
           <button data-act="rock">🪨 ขว้างก้อนหิน<small>จับง่าย แต่หนีง่าย</small></button>
           <button data-act="run" class="ghost">หนี</button>
@@ -890,9 +904,12 @@
            <b>${w.modInfo.icon} ${w.modInfo.name}</b><span>${w.modInfo.th}</span></div>`
       : '';
     if (B.state === 'wave') {
+      const idle = B.idleCount();
       box.innerHTML = `<div class="pv-head">กำลังสู้ — เวฟ ${B.waveIndex + 1}</div>
         ${modTag(B.waves[B.waveIndex])}
-        <div class="pv-left">เหลือศัตรู <b>${B.spawnQueue.length + B.enemies.length}</b> ตัว</div>`;
+        <div class="pv-left">เหลือศัตรู <b>${B.spawnQueue.length + B.enemies.length}</b> ตัว</div>
+        ${idle ? `<div class="pv-idle">⚠ มี <b>${idle}</b> ตัวยิงไม่โดนใครเลย
+          — ลองย้ายไปแท่นที่ติดทางเดินกว่านี้</div>` : ''}`;
       return;
     }
     if (B.waveIndex >= B.waves.length) { box.innerHTML = ''; return; }
@@ -903,7 +920,8 @@
         const def = PTD.enemy(g.id, { boss: g.boss, bossX: g.bossX });
         return `<div class="pv-row${g.boss ? ' boss' : ''}" data-tip-mon="${g.id}">
           ${sprite(g.id, 'tiny')}
-          <span class="pv-name">${def.name}${g.boss ? ' 👑' : ''}</span>
+          <span class="pv-name">${def.name}${g.boss ? ' 👑' : ''}${
+            PTD.save.data.caught.includes(g.id) ? ' ' + ball('sm') : ''}</span>
           <span class="pv-types">${def.types.map(t =>
             `<i class="tdot" style="background:${PTD.TYPE_COLOR[t]}" title="${PTD.TYPE_TH[t]}"></i>`).join('')}</span>
           <b>x${g.count}</b></div>`;

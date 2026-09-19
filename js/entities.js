@@ -294,6 +294,8 @@
       this.level = mon ? (mon.lv || 1) : 1;
       this.startLevel = this.level;
       this.expLevels = 0;        // นับเฉพาะเลเวลที่ได้จากการฆ่าในด่านนี้
+      this.lastHitAt = -1;       // เวลาที่ทำดาเมจครั้งล่าสุด (-1 = ยังไม่เคย)
+      this.placedAt = G.time;
       this.exp = mon ? (mon.exp || 0) : 0;
       this.cd = 0;
       this.kills = 0; this.damageDealt = 0;

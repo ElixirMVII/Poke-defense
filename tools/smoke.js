@@ -241,6 +241,74 @@ fs.mkdirSync(OUT, { recursive: true });
     });
   });
 
+  /* ---------- 4.7 หน้าตา: โปเกบอล เครื่องหมาย % และป้ายจับได้แล้ว ---------- */
+  await step('% ไม่ถูกวาดด้วยฟอนต์พิกเซล (เดิมอ่านเป็นเลข 2)', async () => {
+    return await page.evaluate(() => {
+      PTD.ui.showEncounter({ id: 37, lv: 4, angry: 0, eating: 0, turns: 0 });
+      const b = document.querySelector('.odd.good b');
+      const unit = b.querySelector('.u');
+      const num = b.firstChild.textContent.trim();
+      const f = getComputedStyle(unit).fontFamily;
+      return {
+        ตัวเลข: num, หน่วย: unit.textContent,
+        หน่วยใช้ฟอนต์ไทย: /Noto Sans Thai/.test(f),
+        ตัวเลขไม่ติดหน่วย: !/%/.test(num)
+      };
+    });
+  });
+
+  await step('โปเกบอลเป็นรูปบอลจริง ไม่ใช่อิโมจิ', async () => {
+    return await page.evaluate(() => {
+      const pb = document.querySelector('.enc-acts .throw .pokeball');
+      const cs = getComputedStyle(pb);
+      const box = pb.getBoundingClientRect();
+      return {
+        มีองค์ประกอบ: !!pb,
+        กลม: cs.borderRadius === '50%',
+        มีแถบสามชั้น: /linear-gradient/.test(cs.backgroundImage),
+        กว้าง: Math.round(box.width),
+        ไม่มีอิโมจิเหลือ: !/⚪/.test(document.body.innerHTML)
+      };
+    });
+  });
+
+  await step('ตัวที่จับแล้วขึ้นโปเกบอลในเด็กซ์', async () => {
+    await page.evaluate(() => PTD.ui.closeModal());
+    return await page.evaluate(() => {
+      PTD.app.go('dex');
+      const caught = PTD.save.data.caught.length;
+      const marks = document.querySelectorAll('.dex-cell .caught-mark').length;
+      const first = PTD.save.data.caught[0];
+      const cell = [...document.querySelectorAll('.dex-cell')]
+        .find(c => c.querySelector('.dex-no').textContent === '#' + String(first).padStart(3, '0'));
+      return { จับได้: caught, ป้ายบอล: marks, ตรงกัน: marks === caught,
+               ป้ายอยู่บนตัวที่จับแล้ว: !!cell.querySelector('.caught-mark') };
+    });
+  });
+
+  await step('เตือนเมื่อป้อมยิงไม่โดนใครเลย', async () => {
+    return await page.evaluate(() => {
+      const B = PTD.battle, M = PTD.map;
+      B.enter({ stage: PTD.campaign.stageById('s1') });
+      B.money = 9999;
+      // หาแท่นที่ไกลทางเดินที่สุด เพื่อจำลองการวางผิดที่
+      const far = M.pads.map(pd => {
+        let best = 99;
+        for (let r = 0; r < M.ROWS; r++) for (let c = 0; c < M.COLS; c++)
+          if (M.blocked[r][c] === 1) best = Math.min(best, Math.hypot(c - pd.c, r - pd.r));
+        return { pd, d: best };
+      }).sort((a, b) => b.d - a.d)[0].pd;
+      B.placing = B.roster[0].mon.uid;
+      B.tryPlace(far.c, far.r);
+      B.placing = null;
+      B.startWave();
+      const before = B.idleCount();
+      for (let i = 0; i < 30 * 10; i++) B.update(1 / 30);
+      return { ตอนเริ่ม: before, หลัง10วิ: B.idleCount(),
+               เตือนถูกจังหวะ: before === 0 && B.idleCount() === 1 };
+    });
+  });
+
   /* ---------- 5. เมก้าอีโวลูชัน ---------- */
   await step('เมก้าอีโวลูชัน', async () => {
     return await page.evaluate(async () => {
