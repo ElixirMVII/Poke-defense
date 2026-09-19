@@ -9,9 +9,22 @@
 เว็บเสิร์ฟจาก branch **`gh-pages`** ไม่ใช่ `main`
 
 ```bash
-git push origin main
-git push origin main:gh-pages    # อันนี้คืออันที่ทำให้เว็บเปลี่ยน
+git push poke main
+git push poke main:gh-pages      # อันนี้คืออันที่ทำให้เว็บเปลี่ยน
 ```
+
+> ใช้ remote ชื่อ `poke` ไม่ใช่ `origin`
+>
+> เวลาทำงานในคอนเทนเนอร์ของ Claude Code `origin` จะถูกรีเซ็ตกลับไปชี้
+> profile repo (`ElixirMVII/ElixirMVII`) ทุกครั้งที่คอนเทนเนอร์รีสตาร์ต
+> เคยเผลอ push ขึ้นผิดรีโปมาแล้วสองครั้ง ตั้ง remote แยกชื่อ `poke` ไว้กัน
+>
+> ถ้ามี branch หลุดไปที่ profile repo: proxy บล็อกการลบ branch (HTTP 403)
+> ให้ force push commit ว่าง (`7dd4882`) ทับแทน แล้ว branch นั้นจะไม่มีไฟล์เหลือ
+>
+> ```bash
+> git push --force https://github.com/ElixirMVII/ElixirMVII 7dd4882:refs/heads/<branch>
+> ```
 
 ## เล่นบน iPad / iPhone
 
