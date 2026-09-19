@@ -112,8 +112,47 @@
     }
   }
 
+  /* ---------- แท่นวาง (build pad) ----------
+   * เดิมวางได้เกือบทุกช่องว่าง (เช่น meadow วางได้ 186 ช่อง ติดทางเดิน 75)
+   * ผู้เล่นใช้จริงแค่ 6 ช่อง ตำแหน่งเลยไม่เคยเป็นการตัดสินใจ
+   * เปลี่ยนมาเป็นแท่นวางจำนวนจำกัดแบบ Kingdom Rush — ต้องแย่งกันว่าจะให้ใครยืนตรงไหน
+   *
+   * เลือกแท่นด้วยการให้คะแนน "ช่องนี้คุมทางเดินได้กี่ช่องในรัศมียิงทั่วไป"
+   * แล้วไล่เก็บจากคะแนนสูงสุดโดยเว้นระยะกัน จะได้กระจายคุมคนละช่วงของทาง
+   * คิดจากทางเดินโดยตรง เลยใช้ได้กับแผนที่ใหม่ที่เพิ่มทีหลังโดยไม่ต้องวางมือ */
+  const PAD_RADIUS = 3.4;     // รัศมีที่ใช้ให้คะแนน (หน่วยช่อง ~ ระยะยิงกลาง ๆ)
+  const PAD_SPACING = 1.9;    // แท่นสองอันต้องห่างกันอย่างน้อยเท่านี้
+  let pads = [];              // [{c,r,score}]
+  let padAt = [];             // padAt[r][c] = true
+
+  function buildPads(layout) {
+    const want = layout.pads || 16;
+    const cand = [];
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      if (blocked[r][c] !== 0) continue;        // ทางเดินหรือของตกแต่งขวาง
+      let score = 0;
+      for (let rr = 0; rr < ROWS; rr++) for (let cc = 0; cc < COLS; cc++) {
+        if (blocked[rr][cc] !== 1) continue;
+        const d = Math.hypot(cc - c, rr - r);
+        if (d <= PAD_RADIUS) score += 1 - d / (PAD_RADIUS + 1);
+      }
+      if (score > 0) cand.push({ c, r, score });
+    }
+    cand.sort((a, b) => b.score - a.score || (a.r - b.r) || (a.c - b.c));
+
+    pads = [];
+    for (const p of cand) {
+      if (pads.length >= want) break;
+      if (pads.some(q => Math.hypot(q.c - p.c, q.r - p.r) < PAD_SPACING)) continue;
+      pads.push(p);
+    }
+    padAt = [];
+    for (let r = 0; r < ROWS; r++) padAt[r] = new Array(COLS).fill(false);
+    for (const p of pads) padAt[p.r][p.c] = true;
+  }
+
   function buildable(c, r) {
-    return c >= 0 && c < COLS && r >= 0 && r < ROWS && blocked[r][c] === 0;
+    return c >= 0 && c < COLS && r >= 0 && r < ROWS && blocked[r][c] === 0 && padAt[r][c];
   }
 
   /* ---------- วาดฉากลงแคนวาสสำรองครั้งเดียว ---------- */
@@ -230,6 +269,7 @@
     TILE, COLS, ROWS, W, H,
     id: ACTIVE, name: '', WAYPOINTS, PATH_LEN, terrain: null,
     pointAt, buildable, blocked, renderTerrain,
+    get pads() { return pads; },
     tileOf: (x, y) => ({ c: Math.floor(x / TILE), r: Math.floor(y / TILE) }),
     centerOf: (c, r) => ({ x: c * TILE + TILE / 2, y: r * TILE + TILE / 2 })
   };
@@ -243,6 +283,7 @@
     buildPath();
     markPath();
     buildDecor(layout);
+    buildPads(layout);
     map.id = ACTIVE;
     map.name = layout.name;
     map.WAYPOINTS = WAYPOINTS;

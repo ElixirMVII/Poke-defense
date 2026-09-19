@@ -400,6 +400,9 @@ canvas#game {
 .rmon-name { font-size: 9px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rmon-lv { font-family: var(--font-pixel); font-size: 9px; color: var(--shell); }
 .rmon-tag { font-size: 8px; color: var(--ink-soft); }
+.rmon-cost { font-family: var(--font-pixel); font-size: 9px; color: var(--gold); }
+.rmon-cost.no { color: var(--danger); }
+.rmon.poor { opacity: .62; }
 .hotkey {
   position: absolute; left: 3px; top: 3px; z-index: 1;
   font-family: var(--font-pixel); font-size: 8px; line-height: 14px;
@@ -492,6 +495,13 @@ button.evolve.locked, button.mega.locked, button.candy.locked {
 .pv-row b { font-family: var(--font-pixel); font-size: 11px; }
 .pv-types { display: flex; gap: 3px; }
 .tdot { width: 8px; height: 8px; border-radius: 50%; display: block; border: 1px solid rgba(0,0,0,.25); }
+.pv-mod {
+  display: flex; flex-direction: column; gap: 1px;
+  border-left: 4px solid var(--mc); background: var(--paper-2);
+  border-radius: var(--r-sm); padding: 5px 9px; margin-bottom: 6px;
+}
+.pv-mod b { font-family: var(--font-pixel); font-size: 11px; color: var(--mc); filter: brightness(.72); }
+.pv-mod span { font-size: 10.5px; color: var(--ink-soft); }
 .pv-left { font-size: 12px; color: var(--ink-soft); }
 .pv-left b { color: var(--ink); font-family: var(--font-pixel); }
 

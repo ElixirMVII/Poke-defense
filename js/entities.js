@@ -90,10 +90,15 @@
     constructor(spec, hpMul, G) {
       const def = PTD.enemy(spec.id, { boss: spec.boss, aura: spec.aura, bossX: spec.bossX });
       this.def = def;
-      this.maxHp = Math.round(def.hp * hpMul);
+      // ลักษณะพิเศษประจำเวฟ (ฝูงเร็ว/เกราะหนา/ฝูงใหญ่/ฟื้นเลือด) — บอสไม่รับผล
+      const mod = spec.boss ? null : (spec.mod || null);
+      this.mod = mod;
+      this.maxHp = Math.max(1, Math.round(def.hp * hpMul * (mod ? mod.hp : 1)));
       this.hp = this.maxHp;
-      this.baseSpeed = def.speed;
-      this.armor = def.armor || 0;
+      // สุ่มความเร็วรายตัวนิดหน่อย แถวจะได้กระจายแทนที่จะเดินซ้อนกันเป็นก้อนเดียว
+      this.baseSpeed = def.speed * (mod ? mod.speed : 1) * (spec.boss ? 1 : (0.92 + Math.random() * 0.16));
+      this.armor = (def.armor || 0) * (mod ? mod.armor : 1);
+      this.regen = mod && mod.regen ? mod.regen : 0;
       // เวฟหลัง ๆ ศัตรูอึดขึ้น ค่าหัวก็ต้องขึ้นตาม ไม่งั้นเศรษฐกิจตามไม่ทัน
       this.bounty = Math.round(def.bounty * (0.65 + 0.35 * Math.min(hpMul, 8)));
       this.dist = 0;
@@ -126,6 +131,11 @@
 
     update(dt, G) {
       if (this.spawnAnim > 0) this.spawnAnim -= dt;
+
+      // เวฟฟื้นเลือด: ยิงไม่ขาดก็ค่อย ๆ กลับมาเต็ม บีบให้ต้องรวมดาเมจให้พอ
+      if (this.regen && this.hp > 0 && this.hp < this.maxHp) {
+        this.hp = Math.min(this.maxHp, this.hp + this.maxHp * this.regen * dt);
+      }
 
       // พิษ/ไฟ ทำดาเมจต่อเนื่อง (ไม่คิดธาตุซ้ำ ไม่ติดเกราะ)
       for (let i = this.dots.length - 1; i >= 0; i--) {
@@ -282,6 +292,8 @@
       const p = M.centerOf(c, r);
       this.x = p.x; this.y = p.y;
       this.level = mon ? (mon.lv || 1) : 1;
+      this.startLevel = this.level;
+      this.expLevels = 0;        // นับเฉพาะเลเวลที่ได้จากการฆ่าในด่านนี้
       this.exp = mon ? (mon.exp || 0) : 0;
       this.cd = 0;
       this.kills = 0; this.damageDealt = 0;
@@ -303,20 +315,41 @@
     get sellValue() { return Math.floor(this.invested * .7); }
     get canEvolve() { return this.def.evolveTo.length > 0 && this.level >= this.def.evolveLv; }
 
+    /* การฆ่าดันเลเวลได้จำกัดจำนวนต่อหนึ่งด่าน ส่วนลูกอม (ซื้อด้วยเงิน) ไม่ติดเพดาน
+     * เดิมเลเวลชนเพดานจาก EXP อย่างเดียว เงินในสนามเลยไม่มีที่ใช้เลย
+     * นับ "เลเวลที่ได้จาก EXP" แยกจากเลเวลรวม ลูกอมจะได้ไม่ไปกินโควตาของ EXP */
+    get expLevelBudget() {
+      const lim = this.G.expLevelCap != null ? this.G.expLevelCap : 3;
+      return Math.max(0, lim - this.expLevels);
+    }
+
+    // ขึ้นเลเวลโดยไม่ผ่านโควตา EXP — ใช้กับลูกอมและของที่ซื้อด้วยเงิน
+    levelUpPaid() {
+      if (this.level >= PTD.MAX_LEVEL) return false;
+      this.level++;
+      this.exp = 0;
+      this.showLevelUp();
+      return true;
+    }
+
+    showLevelUp() {
+      this.G.fx.push(new FloatText(this.x, this.y - 22, 'Lv.' + this.level, '#8be0ff', 14));
+      for (let i = 0; i < 10; i++) {
+        const a = Math.random() * TAU;
+        this.G.fx.push(new Particle(this.x, this.y, Math.cos(a) * 60, Math.sin(a) * 60 - 20, '#8be0ff', 3, .5, 80));
+      }
+      PTD.sfx.levelUp();
+    }
+
     gainExp(amount) {
+      if (this.expLevelBudget <= 0) return;      // โควตาเลเวลจากการฆ่าหมดแล้วสำหรับด่านนี้
       this.exp += amount;
       let leveled = false;
-      while (this.exp >= this.expNext && this.level < PTD.MAX_LEVEL) {
-        this.exp -= this.expNext; this.level++; leveled = true;
+      while (this.exp >= this.expNext && this.level < PTD.MAX_LEVEL && this.expLevelBudget > 0) {
+        this.exp -= this.expNext; this.level++; this.expLevels++; leveled = true;
       }
-      if (leveled) {
-        this.G.fx.push(new FloatText(this.x, this.y - 22, 'Lv.' + this.level, '#8be0ff', 14));
-        for (let i = 0; i < 10; i++) {
-          const a = Math.random() * TAU;
-          this.G.fx.push(new Particle(this.x, this.y, Math.cos(a) * 60, Math.sin(a) * 60 - 20, '#8be0ff', 3, .5, 80));
-        }
-        PTD.sfx.levelUp();
-      }
+      if (this.expLevelBudget <= 0) this.exp = Math.min(this.exp, this.expNext - 1);
+      if (leveled) this.showLevelUp();
     }
 
     // choice = index ของร่างที่เลือก (Eevee มีสามทาง)

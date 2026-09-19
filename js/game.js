@@ -12,8 +12,10 @@
   const TAU = Math.PI * 2;
   const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
 
-  const BREAK_TIME = 12;
+  const BREAK_TIME = 6;              // เดิม 12 วิ ทำให้ 35% ของด่านคือการนั่งดูนาฬิกา
   const EARLY_BONUS_PER_SEC = 6;
+  const RECALL_REFUND = 0.6;         // เก็บกลับได้เงินคืนบางส่วน ย้ายตำแหน่งเลยมีต้นทุน
+  const EXP_LEVELS_PER_STAGE = 3;    // เลเวลที่ได้ฟรีจากการฆ่าต่อหนึ่งด่าน เกินนี้ต้องซื้อลูกอม
   const ARMOR_K = 60;
   const CANDY_COST = (lv) => Math.round(50 + 12 * Math.pow(lv, 1.7));
 
@@ -174,6 +176,14 @@
       if (!M.buildable(c, r)) { PTD.sfx.deny(); this.setBanner('วางตรงนี้ไม่ได้', '#ff8a8a'); return false; }
       if (this.towerAt(c, r)) { PTD.sfx.deny(); this.setBanner('ช่องนี้มีตัวอื่นอยู่แล้ว', '#ff8a8a'); return false; }
 
+      const cost = this.deployCost(slot.mon);
+      if (this.money < cost) {
+        PTD.sfx.deny();
+        this.setBanner('เงินไม่พอ — ' + PTD.dex(slot.mon.id).n + ' ใช้ ' + cost + '₽', '#ff8a8a');
+        return false;
+      }
+      this.money -= cost;
+
       const t = new PTD.Tower(slot.mon.id, c, r, this, slot.mon);
       this.towers.push(t);
       slot.placed = true;
@@ -225,11 +235,21 @@
       const i = this.towers.indexOf(t);
       if (i >= 0) this.towers.splice(i, 1);
       if (this.selected === t) this.selected = null;
+      const back = Math.floor(t.invested * RECALL_REFUND);
+      this.money += back;
+      this.setBanner('เก็บกลับ คืน ' + back + '₽ (' + Math.round(RECALL_REFUND * 100) + '%)', '#8be0ff');
       PTD.sfx.sell();
       PTD.ui.refresh();
     },
 
     /* ---------- ลูกอมพิเศษ ---------- */
+    deployCost(mon) {
+      const d = PTD.tower(mon.id);
+      if (!d) return 0;
+      // ตัวเลเวลสูงแพงกว่านิดหน่อย จะได้ไม่ใช่ว่าเลี้ยงมาแล้วลงฟรี
+      return Math.round((d.cost * (1 + .02 * ((mon.lv || 1) - 1))) / 5) * 5;
+    },
+    canAfford(mon) { return this.money >= this.deployCost(mon); },
     candyCost(t) { return CANDY_COST(t.level); },
     buyCandy() {
       const t = this.selected;
@@ -238,8 +258,8 @@
       const cost = CANDY_COST(t.level);
       if (this.money < cost) { PTD.sfx.deny(); this.setBanner('เงินไม่พอ', '#ff8a8a'); return; }
       this.money -= cost;
-      t.exp = t.expNext;
-      t.gainExp(1);
+      t.invested += cost;
+      t.levelUpPaid();
       PTD.ui.refresh();
     },
 
@@ -296,6 +316,7 @@
         for (let i = 0; i < g.count; i++) {
           this.spawnQueue.push({
             id: g.id, boss: !!g.boss, aura: g.aura || null, bossX: g.bossX || 0,
+            mod: w.modInfo || null,
             at: g.delay + i * g.gap
           });
         }
@@ -304,6 +325,10 @@
       this.waveTime = 0;
       this.state = 'wave';
       if (w.hasBoss) { PTD.sfx.boss(); this.setBanner('⚠ เวฟ ' + (this.waveIndex + 1) + ' — บอส!', '#ff7a7a'); }
+      else if (w.modInfo) {
+        PTD.sfx.waveStart();
+        this.setBanner('เวฟ ' + (this.waveIndex + 1) + ' — ' + w.modInfo.name + ' · ' + w.modInfo.th, w.modInfo.color);
+      }
       else { PTD.sfx.waveStart(); this.setBanner('เวฟ ' + (this.waveIndex + 1) + ' เริ่มแล้ว', '#a8ffb0'); }
       PTD.ui.refresh();
     },
@@ -373,7 +398,8 @@
         if (this.mode === 'stage') {
           PTD.save.clearStage(this.stage.id);
           const r = this.stage.reward;
-          result.money = r.money + Math.floor(this.money * .5);
+          // ไม่คืนเงินที่เหลือในสนามแล้ว เดิมคืน 50% ซึ่งกลายเป็นรางวัลของการไม่ใช้เงิน
+          result.money = r.money;
           result.balls = r.balls;
           result.stone = r.stone || 0;
           if (r.stone) PTD.save.addStone(r.stone);
@@ -430,12 +456,39 @@
     },
 
     /* ---------- วาดภาพ ---------- */
+    // แท่นวางต้องเห็นชัดว่ามีกี่แท่นและเหลือว่างตรงไหน ไม่งั้นระบบจำกัดช่องก็ไม่มีความหมาย
+    drawPads(ctx) {
+      const pads = M.pads || [];
+      const picking = !!this.placing || !!this.movingTower;
+      for (const p of pads) {
+        if (this.towerAt(p.c, p.r)) continue;
+        const x = p.c * M.TILE, y = p.r * M.TILE, s = M.TILE;
+        ctx.save();
+        ctx.globalAlpha = picking ? .85 : .42;
+        // แท่นหินสี่เหลี่ยมมุมมน ให้ดูเป็นที่ยืนจริง ๆ ไม่ใช่แค่กรอบ
+        ctx.fillStyle = '#6b6357';
+        ctx.beginPath(); ctx.roundRect(x + 5, y + 5, s - 10, s - 10, 6); ctx.fill();
+        ctx.fillStyle = '#8d8375';
+        ctx.beginPath(); ctx.roundRect(x + 7, y + 7, s - 14, s - 16, 5); ctx.fill();
+        ctx.strokeStyle = picking ? 'rgba(255,225,150,.95)' : 'rgba(255,255,255,.35)';
+        ctx.lineWidth = picking ? 2 : 1.5;
+        ctx.beginPath(); ctx.roundRect(x + 5, y + 5, s - 10, s - 10, 6); ctx.stroke();
+        if (picking) {
+          ctx.globalAlpha = .5 + .3 * Math.sin(this.time * 5 + p.c + p.r);
+          ctx.fillStyle = '#ffe9a8';
+          ctx.beginPath(); ctx.arc(x + s / 2, y + s / 2, 4, 0, TAU); ctx.fill();
+        }
+        ctx.restore();
+      }
+    },
+
     draw(ctx) {
       ctx.save();
       if (this.shake > 0) {
         ctx.translate((Math.random() - .5) * this.shake * 18, (Math.random() - .5) * this.shake * 18);
       }
       ctx.drawImage(M.terrain, 0, 0);
+      this.drawPads(ctx);
 
       if (this.movingTower) {
         const t = this.movingTower;
@@ -548,7 +601,8 @@
       this.waves = this.stage ? PTD.campaign.stageWaves(this.stage)
                               : PTD.campaign.questWaves(this.quest);
       this.time = 0; this.state = 'ready'; this.speed = 1; this.paused = false;
-      this.money = 0;
+      // เงินตั้งต้นพอลงสนามได้ราว 1-2 ตัวเท่านั้น ที่เหลือต้องหาจากการฆ่า
+      this.money = src.startMoney != null ? src.startMoney : 420;
       this.lives = this.stage ? this.stage.lives : 10;
       this.waveIndex = 0; this.waveTime = 0; this.breakLeft = 0;
       this.spawnQueue = []; this.enemies = []; this.towers = [];
@@ -557,6 +611,7 @@
       this.megaUsed = false;
       this.questTarget = null; this.questBest = 1;
       this.result = null;
+      this.expLevelCap = EXP_LEVELS_PER_STAGE;
       this.stats = { kills: 0, damage: 0, earned: 0, leaked: 0 };
       this.banner = null; this.shake = 0;
 

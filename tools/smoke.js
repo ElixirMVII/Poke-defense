@@ -197,6 +197,49 @@ fs.mkdirSync(OUT, { recursive: true });
     return st;
   });
 
+  /* ---------- 4.5 เศรษฐกิจในสนามรบ ---------- */
+  await step('เงินจำกัด: ลงสนามไม่ครบทีมตั้งแต่แรก', async () => {
+    return await page.evaluate(() => {
+      const B = PTD.battle, M = PTD.map;
+      B.enter({ stage: PTD.campaign.stageById('s1') });
+      const start = B.money;
+      const pads = M.pads.slice();
+      let placed = 0, i = 0;
+      for (const slot of B.roster) {
+        B.placing = slot.mon.uid;
+        while (i < pads.length && !slot.placed) { B.tryPlace(pads[i].c, pads[i].r); i++; }
+        if (slot.placed) placed++;
+      }
+      B.placing = null;
+      const afterPlace = B.money;
+      // เก็บกลับต้องได้เงินคืนบางส่วน ไม่ใช่ฟรี
+      const t = B.towers[0], inv = t.invested;
+      B.recall(t);
+      const refund = B.money - afterPlace;
+      return { เงินตั้งต้น: start, ลงได้: placed, จาก: B.roster.length,
+               เงินเหลือ: Math.round(afterPlace), คืนตอนเก็บกลับ: refund,
+               คืนไม่เต็มราคา: refund < inv, แท่นวาง: pads.length };
+    });
+  });
+
+  await step('ลูกอมมีผลจริง: EXP ดันเลเวลได้จำกัดต่อด่าน', async () => {
+    return await page.evaluate(() => {
+      const B = PTD.battle, M = PTD.map;
+      B.enter({ stage: PTD.campaign.stageById('s1') });
+      B.money = 99999;
+      const p = M.pads[0];
+      B.placing = B.roster[0].mon.uid; B.tryPlace(p.c, p.r);
+      const t = B.towers[0];
+      const start = t.level, cap = t.expLevelCap;
+      t.gainExp(1e9);                       // ฆ่าเยอะแค่ไหนก็ไม่เกินเพดาน
+      const afterExp = t.level;
+      B.selected = t;
+      for (let i = 0; i < 5; i++) B.buyCandy();   // ลูกอมข้ามเพดานได้
+      return { เริ่ม: start, เพดานจากการฆ่า: cap, หลังฆ่าเยอะ: afterExp,
+               หลังซื้อลูกอม5: t.level, ลูกอมข้ามเพดานได้: t.level > afterExp };
+    });
+  });
+
   /* ---------- 5. เมก้าอีโวลูชัน ---------- */
   await step('เมก้าอีโวลูชัน', async () => {
     return await page.evaluate(async () => {
@@ -207,6 +250,7 @@ fs.mkdirSync(OUT, { recursive: true });
       const mon = PTD.save.data.box.find(m => m.id === 6);
       PTD.save.setParty([mon.uid]);
       B.enter({ stage: PTD.campaign.stageById('s1') });
+      B.money = 99999;          // ทดสอบเมก้าอย่างเดียว ไม่ได้ทดสอบเศรษฐกิจ
 
       let free = null;
       for (let r = 0; r < M.ROWS && !free; r++) for (let c = 0; c < M.COLS && !free; c++)

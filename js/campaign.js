@@ -24,13 +24,13 @@
   // พลังชีวิตรวมเป้าหมายของแต่ละด่าน (หน่วยพัน) — จูนจากการวัดจริงด้วย tools/balance.js
   // ตัวเลขนี้ไม่ใช่เส้นโค้งสวย ๆ เพราะพลังของทีมก็ไม่ได้โตเป็นเส้นตรง
   // ช่วงกลางเกมทีมโตเร็วกว่า (ได้ร่างวิวัฒนาการ) ด่านจึงต้องกระโดดตามให้ทัน
-  let HP_TARGET = [27, 46, 70, 86, 118, 148, 182, 232, 318, 372].map(k => k * 1000);
+  let HP_TARGET = [26, 44, 66, 82, 112, 140, 172, 214, 282, 322].map(k => k * 1000);
 
   /* ---------------- ด่านแคมเปญ ---------------- */
   // hpK/countStep คือสองตัวหลักที่คุมความยาก ปรับแล้วรัน tools/balance.js ดูผลเสมอ
   const STAGES = [
     {
-      id: 's1', no: 1, name: 'ทุ่งหญ้าต้นทาง', map: 'meadow',
+      id: 's1', no: 1, name: 'ทุ่งหญ้าต้นทาง', map: 'meadow', startMoney: 400,
       desc: 'ด่านแรก ศัตรูยังอ่อน ใช้ทำความคุ้นเคยกับการวางทีม',
       waves: 10, seed: 1101, tierFrom: 0, tierTo: 1.8,
       hpFrom: 0.85, hpPow: 1.16, hpK: 0.115, countBase: 7, countStep: 0.299,
@@ -39,7 +39,7 @@
       reward: { money: 700, balls: 18 }
     },
     {
-      id: 's2', no: 2, name: 'ป่าลึก', map: 'canyon',
+      id: 's2', no: 2, name: 'ป่าลึก', map: 'canyon', startMoney: 440,
       desc: 'ป่าทึบ ศัตรูสายแมลงกับพิษมาเป็นฝูงใหญ่',
       waves: 12, seed: 2202, tierFrom: 0.5, tierTo: 2.4,
       hpFrom: 1.00, hpPow: 1.20, hpK: 0.135, countBase: 8, countStep: 0.325,
@@ -48,7 +48,7 @@
       reward: { money: 950, balls: 20, stone: 15 }
     },
     {
-      id: 's3', no: 3, name: 'ชานเมืองเก่า', map: 'shore',
+      id: 's3', no: 3, name: 'ชานเมืองเก่า', map: 'shore', startMoney: 480,
       desc: 'ทางคดเคี้ยว ศัตรูหลากหลาย ต้องมีธาตุครอบคลุม',
       waves: 14, seed: 3303, tierFrom: 0.9, tierTo: 2.8,
       hpFrom: 1.15, hpPow: 1.22, hpK: 0.155, countBase: 8, countStep: 0.351,
@@ -57,7 +57,7 @@
       reward: { money: 1300, balls: 22, stone: 3 }
     },
     {
-      id: 's4', no: 4, name: 'ริมทะเลสาบ', map: 'meadow',
+      id: 's4', no: 4, name: 'ริมทะเลสาบ', map: 'meadow', startMoney: 520,
       desc: 'ศัตรูสายน้ำเดินเร็ว ต้องมีตัวหน่วง',
       waves: 15, seed: 4404, tierFrom: 1.3, tierTo: 3.1,
       hpFrom: 1.30, hpPow: 1.24, hpK: 0.175, countBase: 9, countStep: 0.377,
@@ -66,7 +66,7 @@
       reward: { money: 1700, balls: 24, stone: 9 }
     },
     {
-      id: 's5', no: 5, name: 'ถ้ำมืด', map: 'canyon',
+      id: 's5', no: 5, name: 'ถ้ำมืด', map: 'canyon', startMoney: 560,
       desc: 'ศัตรูเกราะหนา ป้อมยิงเบา ๆ เจาะไม่เข้า',
       waves: 16, seed: 5505, tierFrom: 1.7, tierTo: 3.4,
       hpFrom: 1.45, hpPow: 1.26, hpK: 0.195, countBase: 9, countStep: 0.403,
@@ -75,7 +75,7 @@
       reward: { money: 2200, balls: 26, stone: 6 }
     },
     {
-      id: 's6', no: 6, name: 'เทือกเขาหิน', map: 'shore',
+      id: 's6', no: 6, name: 'เทือกเขาหิน', map: 'shore', startMoney: 600,
       desc: 'ศัตรูหนักและช้า แต่มาไม่หยุด',
       waves: 18, seed: 6606, tierFrom: 2.0, tierTo: 3.7,
       hpFrom: 1.60, hpPow: 1.28, hpK: 0.215, countBase: 10, countStep: 0.429,
@@ -84,7 +84,7 @@
       reward: { money: 2700, balls: 28, stone: 142 }
     },
     {
-      id: 's7', no: 7, name: 'โรงไฟฟ้าร้าง', map: 'meadow',
+      id: 's7', no: 7, name: 'โรงไฟฟ้าร้าง', map: 'meadow', startMoney: 640,
       desc: 'ศัตรูไฟฟ้าเร็วจี๋ พลาดนิดเดียวทะลุทันที',
       waves: 18, seed: 7707, tierFrom: 2.2, tierTo: 3.9,
       hpFrom: 1.75, hpPow: 1.30, hpK: 0.235, countBase: 10, countStep: 0.455,
@@ -93,7 +93,7 @@
       reward: { money: 3200, balls: 30, stone: 94 }
     },
     {
-      id: 's8', no: 8, name: 'ทะเลลึก', map: 'canyon',
+      id: 's8', no: 8, name: 'ทะเลลึก', map: 'canyon', startMoney: 680,
       desc: 'ฝูงใหญ่จากใต้น้ำ ต้องมีตัวโจมตีเป็นวง',
       waves: 20, seed: 8808, tierFrom: 2.5, tierTo: 4,
       hpFrom: 1.95, hpPow: 1.32, hpK: 0.26, countBase: 11, countStep: 0.481,
@@ -102,7 +102,7 @@
       reward: { money: 3800, balls: 32, stone: 130 }
     },
     {
-      id: 's9', no: 9, name: 'ภูเขาไฟ', map: 'shore',
+      id: 's9', no: 9, name: 'ภูเขาไฟ', map: 'shore', startMoney: 720,
       desc: 'ศัตรูธาตุไฟล้วน สายน้ำกับหินได้เปรียบเต็ม ๆ',
       waves: 20, seed: 9909, tierFrom: 2.8, tierTo: 4,
       hpFrom: 2.15, hpPow: 1.34, hpK: 0.285, countBase: 11, countStep: 0.507,
@@ -111,7 +111,7 @@
       reward: { money: 4500, balls: 34, stone: 65 }
     },
     {
-      id: 's10', no: 10, name: 'ยอดเขาสูงสุด', map: 'meadow',
+      id: 's10', no: 10, name: 'ยอดเขาสูงสุด', map: 'meadow', startMoney: 760,
       desc: 'ด่านสุดท้าย ทุกอย่างที่เคยเจอกลับมารวมกัน',
       waves: 24, seed: 10010, tierFrom: 3.0, tierTo: 4,
       hpFrom: 2.40, hpPow: 1.36, hpK: 0.315, countBase: 12, countStep: 0.546,

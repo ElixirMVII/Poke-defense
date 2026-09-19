@@ -607,13 +607,16 @@
       <div class="roster">${B.roster.map((s, i) => {
         const t = PTD.tower(s.mon.id);
         const placed = s.placed;
-        return `<button class="rmon ${placed ? 'placed' : ''} ${B.placing === s.mon.uid ? 'sel' : ''}"
+        const cost = B.deployCost(s.mon);
+        const poor = !placed && !B.canAfford(s.mon);
+        return `<button class="rmon ${placed ? 'placed' : ''} ${poor ? 'poor' : ''} ${B.placing === s.mon.uid ? 'sel' : ''}"
                   data-uid="${s.mon.uid}" data-tip-mon="${s.mon.id}">
           <span class="hotkey">${i + 1}</span>
           ${sprite(s.mon.id)}
           <div class="rmon-name">${t.name}</div>
           <div class="rmon-lv">Lv.${placed && s.tower ? s.tower.level : s.mon.lv}</div>
-          ${placed ? '<div class="rmon-tag">ลงสนามแล้ว</div>' : ''}
+          ${placed ? '<div class="rmon-tag">ลงสนามแล้ว</div>'
+                   : `<div class="rmon-cost ${poor ? 'no' : ''}">₽${cost}</div>`}
         </button>`;
       }).join('')}</div>`;
     const cp = $('btnCancelPlace');
@@ -779,14 +782,20 @@
     const B = PTD.battle;
     const box = $('preview');
     if (!box) return;
+    const modTag = (w) => w && w.modInfo
+      ? `<div class="pv-mod" style="--mc:${w.modInfo.color}">
+           <b>${w.modInfo.icon} ${w.modInfo.name}</b><span>${w.modInfo.th}</span></div>`
+      : '';
     if (B.state === 'wave') {
       box.innerHTML = `<div class="pv-head">กำลังสู้ — เวฟ ${B.waveIndex + 1}</div>
+        ${modTag(B.waves[B.waveIndex])}
         <div class="pv-left">เหลือศัตรู <b>${B.spawnQueue.length + B.enemies.length}</b> ตัว</div>`;
       return;
     }
     if (B.waveIndex >= B.waves.length) { box.innerHTML = ''; return; }
     const w = B.waves[B.waveIndex];
     box.innerHTML = `<div class="pv-head">เวฟถัดไป: ${B.waveIndex + 1}/${B.waves.length}</div>` +
+      modTag(w) +
       w.groups.map(g => {
         const def = PTD.enemy(g.id, { boss: g.boss, bossX: g.bossX });
         return `<div class="pv-row${g.boss ? ' boss' : ''}" data-tip-mon="${g.id}">

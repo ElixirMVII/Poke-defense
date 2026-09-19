@@ -29,6 +29,22 @@
    *   bosses     { เลขเวฟ: {id, aura, x} }
    *   escort     { เลขเวฟ: [id, ...] }
    */
+  /* ลักษณะพิเศษประจำเวฟ — ยืมแนวคิดจากเวฟพิเศษของ Bloons/Kingdom Rush
+   * เดิมเวฟต่างกันแค่ "เลือดเยอะขึ้น" ซึ่งไม่ได้เปลี่ยนวิธีเล่นเลย
+   * อันนี้บังคับให้ผู้เล่นเปลี่ยนแผน เช่น เวฟเกราะหนาต้องพึ่งตัวตีแรงทีละที
+   * ทุกตัวปรับสองทางเสมอ (ได้อย่างเสียอย่าง) จะได้ไม่ใช่แค่ยากขึ้นเฉย ๆ */
+  const MODIFIERS = {
+    swift:   { name: 'ฝูงเร็ว',    th: 'เดินเร็วขึ้นมาก แต่เลือดบาง',
+               icon: '»', color: '#6bc8ff', speed: 1.5,  hp: .72, armor: 1,   count: 1 },
+    armored: { name: 'เกราะหนา',   th: 'เกราะหนาขึ้นมาก แต่เดินช้า',
+               icon: '#', color: '#b8b8d0', speed: .78,  hp: 1,   armor: 2.1, count: 1 },
+    horde:   { name: 'ฝูงใหญ่',    th: 'มากันเยอะมาก แต่ตัวละเอียดน้อย',
+               icon: '+', color: '#ffb35a', speed: 1.05, hp: .52, armor: .8,  count: 1.8 },
+    regen:   { name: 'ฟื้นเลือด',  th: 'ค่อย ๆ ฟื้นเลือดถ้าฆ่าไม่ขาด',
+               icon: '~', color: '#5ec06d', speed: .95,  hp: .88, armor: 1,   count: 1, regen: .035 }
+  };
+  const MOD_KEYS = Object.keys(MODIFIERS);
+
   function buildWaves(opts) {
     const o = Object.assign({
       count: 10, seed: 1, tierFrom: 0, tierTo: 3,
@@ -80,10 +96,20 @@
       const weights = pools.map((p, t) => p.length ? Math.max(0, 1 - Math.abs(t - center) / 1.6) : 0);
       const sum = weights.reduce((a, b) => a + b, 0) || 1;
 
+      /* ลักษณะพิเศษ: เว้นสองเวฟแรกไว้ให้ผู้เล่นตั้งตัว แล้วโผล่ทุก ๆ 3 เวฟโดยประมาณ
+       * เวฟบอสไม่ใส่ เพราะบอสมีลูกเล่นของตัวเองอยู่แล้ว */
+      let mod = null;
+      if (!o.bosses[w] && w > 2 && rnd() < .42) mod = MOD_KEYS[Math.floor(rnd() * MOD_KEYS.length)];
+      const M = mod ? MODIFIERS[mod] : null;
+
       const groups = [];
       const used = new Set();
-      // มีป้อมได้แค่ 6 ตัว ถ้าปล่อย 4 กลุ่มพร้อมกันคือ 60 ตัวต่อเวฟ รับไม่ไหวแน่
-      const nGroups = w <= 2 ? 1 : (w <= 6 ? 2 : 3);
+      /* หั่นจำนวนศัตรูรวมของเวฟไปตามกลุ่ม แทนที่จะให้ทุกกลุ่มเต็มจำนวน
+       * เลยเพิ่มความหลากหลายของสายพันธุ์ได้โดยที่ภาระรวมไม่บานปลาย
+       * (เดิม 1-4 ชนิดต่อเวฟ ด่าน 5 ทั้งด่านเจอแค่ 13 ชนิด) */
+      const nGroups = w <= 1 ? 2 : (w <= 4 ? 3 : (w <= 9 ? 4 : 5));
+      let total = Math.round((o.countBase + i * o.countStep * 2.4) * (M ? M.count : 1));
+      total = Math.max(nGroups * 2, total);
       let delay = 0;
 
       for (let g = 0; g < nGroups; g++) {
@@ -94,10 +120,13 @@
         recent.push(id);
         while (recent.length > 9) recent.shift();
 
-        const count = Math.max(4, Math.round((o.countBase + i * o.countStep) * (g === 0 ? 1 : 0.8)));
-        const gap = Math.max(0.28, 0.9 - i * 0.02);
+        const left = nGroups - g;
+        const count = Math.max(2, Math.round(total / left));
+        total -= count;
+        const gap = Math.max(0.26, 0.85 - i * 0.018);
         groups.push({ id, count, gap, delay: Math.round(delay * 10) / 10 });
-        delay += 2.5 + rnd() * 2;
+        // กลุ่มถัดไปตามมาไวขึ้นเมื่อด่านลึกขึ้น แถวจะได้ทับซ้อนกันบ้างแต่ไม่กองเป็นก้อนเดียว
+        delay += Math.max(1.1, 2.6 - i * .06) + rnd() * 1.6;
       }
 
       const boss = o.bosses[w];
@@ -111,12 +140,14 @@
       waves.push({
         hpMul: Math.round((o.hpFrom + Math.pow(i, o.hpPow) * o.hpK) * 100) / 100,
         groups,
-        hasBoss: !!boss
+        hasBoss: !!boss,
+        mod, modInfo: M
       });
     }
     return waves;
   }
 
   PTD.buildWaves = buildWaves;
+  PTD.WAVE_MODIFIERS = MODIFIERS;
   PTD.waveCount = (waves, i) => waves[i].groups.reduce((s, g) => s + g.count, 0);
 })(window.PTD = window.PTD || {});

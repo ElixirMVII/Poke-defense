@@ -133,14 +133,26 @@ const CATCH_PER_STAGE = Number(process.argv[3] || 10);
         return orig(e);
       };
 
+      /* ตอนนี้ลงสนามต้องจ่ายเงิน วางครบ 6 ตั้งแต่แรกไม่ได้แล้ว
+       * ทั้งสองกลยุทธ์จึงต้องทยอยวางตามเงินที่หามาได้ */
       const spots = goodSpots();
-      B.roster.forEach((s, i) => {
-        if (!spots[i]) return;
-        B.placing = s.mon.uid;
-        B.tryPlace(spots[i].c, spots[i].r);
-      });
-      B.placing = null;
-      // กลยุทธ์ idle = วางแล้วไม่แตะอะไรอีกเลย ใช้ทดสอบว่าเกม "ปล่อยทิ้งก็ชนะ" ไหม
+      let nextSpot = 0;
+      function deployAffordable() {
+        for (const s of B.roster) {
+          if (s.placed) continue;
+          if (!B.canAfford(s.mon)) continue;
+          while (nextSpot < spots.length && B.towerAt(spots[nextSpot].c, spots[nextSpot].r)) nextSpot++;
+          if (nextSpot >= spots.length) return;
+          B.placing = s.mon.uid;
+          B.tryPlace(spots[nextSpot].c, spots[nextSpot].r);
+          B.placing = null;
+        }
+      }
+      // แพงสุดก่อน จะได้ไม่เอาเงินไปถมตัวอ่อนจนวางตัวหลักไม่ได้
+      B.roster.sort((a, b) => B.deployCost(b.mon) - B.deployCost(a.mon));
+      deployAffordable();
+      // กลยุทธ์ idle = วางเท่าที่เงินตั้งต้นพอ แล้วไม่แตะอะไรอีกเลย
+      // ใช้ทดสอบว่าเกม "ปล่อยทิ้งก็ชนะ" ไหม
       const IDLE = STRATEGY === 'idle';
 
       const dt = 1 / 30;
@@ -153,6 +165,7 @@ const CATCH_PER_STAGE = Number(process.argv[3] || 10);
         thinkT += dt;
         if (thinkT >= .5 && !IDLE) {
           thinkT = 0;
+          deployAffordable();           // เอาตัวที่เหลือลงสนามทันทีที่เงินพอ
           // วิวัฒนาการก่อน แล้วค่อยป้อนลูกอม
           let did = false;
           for (const t of B.towers) {
@@ -174,7 +187,7 @@ const CATCH_PER_STAGE = Number(process.argv[3] || 10);
             }
           }
         }
-        if (B.state === 'break' && B.breakLeft < 9) B.startWave();
+        if (B.state === 'break' && B.breakLeft < 3) B.startWave();
       }
       B.leak = orig;
       return {
@@ -182,6 +195,7 @@ const CATCH_PER_STAGE = Number(process.argv[3] || 10);
         lives: B.lives, dps: Math.round(B.towers.reduce((s, t) => s + t.dps, 0)),
         team: B.towers.map(t => t.def.name + ' Lv' + t.level),
         maxLv: B.towers.reduce((m, t) => Math.max(m, t.level), 0),
+        placed: B.towers.length, moneyLeft: Math.round(B.money),
         questBest: B.mode === 'quest' ? Math.round(B.questBest * 100) : null,
         totalHp: Math.round(totalHp),
         secNeeded: Math.round(totalHp / Math.max(1, B.towers.reduce((s, t) => s + t.dps, 0))),
@@ -221,13 +235,15 @@ const CATCH_PER_STAGE = Number(process.argv[3] || 10);
   }, { STRATEGY, CATCH_PER_STAGE, DIFF_HP, DIFF_COUNT, HP_BASE, HP_STEP });
 
   console.log(`\n=== ${out.strategy} · จับ ${CATCH_PER_STAGE}/ด่าน · hp×${DIFF_HP} count×${DIFF_COUNT} ===`);
-  console.log('ผล  ด่าน                       เวฟ    หัวใจ  DPS   maxLv  จับ  HPรวม   วิ.ที่ต้องยิง  ตัวที่หลุด');
+  console.log('ผล  ด่าน                       เวฟ    หัวใจ  ลง  เงินเหลือ  DPS   maxLv  จับ  HPรวม  วิ.ที่ต้องยิง  ตัวที่หลุด');
   for (const r of out.log) {
     console.log(
       (r.won ? ' ✓ ' : ' ✗ '),
       r.label.padEnd(24),
       `${r.wave}/${r.waves}`.padStart(5),
       String(r.lives).padStart(6),
+      String(r.placed).padStart(3),
+      String(r.moneyLeft).padStart(9),
       String(r.dps).padStart(6),
       String(r.maxLv).padStart(6),
       String(r.dexCaught).padStart(4),
