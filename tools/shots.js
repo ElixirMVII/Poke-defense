@@ -2,7 +2,7 @@
 const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
-const { serve } = require('./server');
+const { serve, seedTestUser } = require('./server');
 
 const REPO = path.resolve(__dirname, '..');
 const PORT = 8912;
@@ -18,6 +18,7 @@ fs.mkdirSync(OUT, { recursive: true });
 
 
   await page.addInitScript(() => { window.PTD_SPRITE_BASE = '/sprites'; });
+  await seedTestUser(page);
   await page.goto(`http://127.0.0.1:${PORT}/index.html`);
   await page.waitForTimeout(1400);
 

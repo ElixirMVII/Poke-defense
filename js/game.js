@@ -12,10 +12,11 @@
   const TAU = Math.PI * 2;
   const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
 
-  const BREAK_TIME = 6;              // เดิม 12 วิ ทำให้ 35% ของด่านคือการนั่งดูนาฬิกา
+  // สามค่านี้หน้า admin ปรับได้ จึงเป็น let และเปิดผ่าน PTD.battle
+  let BREAK_TIME = 6;                // เดิม 12 วิ ทำให้ 35% ของด่านคือการนั่งดูนาฬิกา
   const EARLY_BONUS_PER_SEC = 6;
-  const RECALL_REFUND = 0.6;         // เก็บกลับได้เงินคืนบางส่วน ย้ายตำแหน่งเลยมีต้นทุน
-  const EXP_LEVELS_PER_STAGE = 3;    // เลเวลที่ได้ฟรีจากการฆ่าต่อหนึ่งด่าน เกินนี้ต้องซื้อลูกอม
+  let RECALL_REFUND = 0.6;           // เก็บกลับได้เงินคืนบางส่วน ย้ายตำแหน่งเลยมีต้นทุน
+  let EXP_LEVELS_PER_STAGE = 3;      // เลเวลที่ได้ฟรีจากการฆ่าต่อหนึ่งด่าน เกินนี้ต้องซื้อลูกอม
   const ARMOR_K = 60;
   const CANDY_COST = (lv) => Math.round(50 + 12 * Math.pow(lv, 1.7));
 
@@ -243,6 +244,13 @@
     },
 
     /* ---------- ลูกอมพิเศษ ---------- */
+    get BREAK_TIME() { return BREAK_TIME; },
+    set BREAK_TIME(v) { BREAK_TIME = Math.max(0, v); },
+    get RECALL_REFUND() { return RECALL_REFUND; },
+    set RECALL_REFUND(v) { RECALL_REFUND = Math.max(0, Math.min(1, v)); },
+    get EXP_LEVELS_PER_STAGE() { return EXP_LEVELS_PER_STAGE; },
+    set EXP_LEVELS_PER_STAGE(v) { EXP_LEVELS_PER_STAGE = Math.max(0, Math.round(v)); },
+
     deployCost(mon) {
       const d = PTD.tower(mon.id);
       if (!d) return 0;

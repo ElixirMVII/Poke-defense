@@ -26,6 +26,8 @@
         case 'party':   PTD.ui.showParty(); break;
         case 'dex':     PTD.ui.showDex(); break;
         case 'starter': PTD.ui.showStarter(); break;
+        case 'login':   PTD.ui.showLogin(); break;
+        case 'admin':   PTD.admin.show(); break;
         case 'safari':
           if (!PTD.safari.enter(arg)) { this.go('world'); return; }
           PTD.ui.showCanvas('safari');
@@ -56,6 +58,21 @@
       this.go('battle', { quest: q });
     },
 
+    /* ---------- หลังเข้าสู่ระบบ ---------- */
+    afterLogin() {
+      const me = PTD.auth.current();
+      if (!me) { this.go('login'); return; }
+      PTD.save.useSlot(PTD.auth.saveKeyFor(me.id));
+      if (!PTD.save.data.started) this.go('starter');
+      else this.go('world');
+    },
+
+    logout() {
+      PTD.save.persist();
+      PTD.auth.logout();
+      this.go('login');
+    },
+
     /* ---------- บูต ---------- */
     boot() {
       const canvas = document.getElementById('game');
@@ -63,7 +80,18 @@
       this.canvas = canvas;
       this.ctx = canvas.getContext('2d');
 
-      PTD.save.load();
+      // บัญชีผู้ใช้ต้องมาก่อนเซฟ เพราะเซฟแยกตามผู้ใช้
+      PTD.auth.load();
+      const me = PTD.auth.current();
+      if (me) PTD.save.useSlot(PTD.auth.saveKeyFor(me.id));
+      else PTD.save.load();
+
+      // ค่าที่หน้า admin แก้ไว้ ต้องทาทับก่อนเกมเริ่มใช้
+      PTD.config.load();
+      PTD.config.apply();
+      const hp = PTD.store.getSync('pokedefense.hptargets.v1');
+      if (Array.isArray(hp) && hp.length) PTD.campaign.setHpTargets(hp);
+
       PTD.useMap('meadow');
 
       PTD.battle.onFinish = (result) => {
@@ -134,8 +162,9 @@
       });
 
       /* ---- หน้าจอแรก ---- */
-      if (!PTD.save.data.started) this.go('starter');
-      else this.go('world');
+      PTD.admin.init(this);
+      if (!PTD.auth.current()) this.go('login');
+      else this.afterLogin();
 
       /* ---- ลูปหลัก ---- */
       let last = performance.now();

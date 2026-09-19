@@ -141,8 +141,9 @@
   let pads = [];              // [{c,r,score}]
   let padAt = [];             // padAt[r][c] = true
 
+  let PAD_COUNT = 16;              // หน้า admin ปรับได้
   function buildPads(layout) {
-    const want = layout.pads || 16;
+    const want = layout.pads || PAD_COUNT;
     const cand = [];
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
       if (blocked[r][c] !== 0) continue;        // ทางเดินหรือของตกแต่งขวาง
@@ -286,6 +287,7 @@
     id: ACTIVE, name: '', WAYPOINTS, PATH_LEN, terrain: null,
     pointAt, buildable, blocked, renderTerrain,
     get pads() { return pads; },
+    get padCount() { return PAD_COUNT; },
     tileOf: (x, y) => ({ c: Math.floor(x / TILE), r: Math.floor(y / TILE) }),
     centerOf: (c, r) => ({ x: c * TILE + TILE / 2, y: r * TILE + TILE / 2 })
   };
@@ -315,4 +317,6 @@
   PTD.MAP_LAYOUTS = LAYOUTS;
   PTD.MAP_THEMES = THEMES;
   PTD.useMap = use;
+  // เปลี่ยนจำนวนแท่นแล้วต้องสร้างใหม่ทันที ไม่งั้นค่าใหม่จะมีผลตอนเปลี่ยนแผนที่เท่านั้น
+  PTD.setPadCount = (n) => { PAD_COUNT = Math.max(1, Math.round(n)); use(ACTIVE); };
 })(window.PTD = window.PTD || {});

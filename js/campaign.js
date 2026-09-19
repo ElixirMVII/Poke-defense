@@ -240,6 +240,9 @@
     STAGES, QUESTS, DIFF,
     stageWaves, questWaves, totalHpOf,
     setHpTargets(arr) { HP_TARGET = arr.slice(); },
+    // หน้า admin ใช้ปรับความยากรวมทั้งเกมโดยไม่ต้องแตะตารางทีละด่าน
+    setHpScale(k) { DIFF.hp = k; },
+    get hpScale() { return DIFF.hp; },
     get hpTargets() { return HP_TARGET.slice(); },
     stageUnlocked, questUnlocked, questProgress,
     stageById, questById, questOf,

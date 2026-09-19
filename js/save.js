@@ -7,8 +7,11 @@
 (function (PTD) {
   'use strict';
 
-  const KEY = 'pokedefense.save.v1';
-  const PARTY_MAX = 6;
+  /* เซฟแยกตามผู้ใช้ — auth.js เรียก useSlot() ตอนล็อกอิน
+   * ค่าเริ่มต้นเป็นคีย์เดิม เซฟเก่าที่มีอยู่ก่อนมีระบบบัญชีจะได้ไม่หาย */
+  const DEFAULT_KEY = 'pokedefense.save.v1';
+  let KEY = DEFAULT_KEY;
+  let PARTY_MAX = 6;
 
   function blank() {
     return {
@@ -31,24 +34,30 @@
   let data = blank();
   let dirty = false;
 
-  function load() {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.v === 1) data = Object.assign(blank(), parsed);
+  // สลับไปใช้เซฟของผู้ใช้อีกคน (ย้ายเซฟเดิมที่ไม่มีเจ้าของมาให้คนแรกที่ล็อกอิน)
+  function useSlot(key) {
+    KEY = key || DEFAULT_KEY;
+    if (KEY !== DEFAULT_KEY && !PTD.store.getSync(KEY)) {
+      const legacy = PTD.store.getSync(DEFAULT_KEY);
+      if (legacy && legacy.v === 1) {
+        PTD.store.setSync(KEY, legacy);
+        PTD.store.delSync(DEFAULT_KEY);
       }
-    } catch (e) {
-      console.warn('อ่านเซฟไม่ได้ เริ่มใหม่:', e.message);
-      data = blank();
     }
+    return load();
+  }
+  function slot() { return KEY; }
+
+  function load() {
+    const parsed = PTD.store.getSync(KEY);
+    if (parsed && parsed.v === 1) data = Object.assign(blank(), parsed);
+    else data = blank();
     return data;
   }
 
   function persist() {
     dirty = false;
-    try { localStorage.setItem(KEY, JSON.stringify(data)); }
-    catch (e) { console.warn('เขียนเซฟไม่ได้:', e.message); }
+    PTD.store.setSync(KEY, data);
   }
 
   // รวบการเขียนหลาย ๆ ครั้งให้เหลือครั้งเดียวต่อเฟรม
@@ -190,11 +199,12 @@
 
   PTD.save = {
     PRICES, buyBalls, buyStone, stoneOptions, candyPrice, buyCandyFor,
-    PARTY_MAX,
+    get PARTY_MAX() { return PARTY_MAX; },
+    setPartyMax(n) { PARTY_MAX = Math.max(1, Math.round(n)); },
     get data() { return data; },
     get money() { return data.money; },
     get balls() { return data.balls; },
-    load, persist, touch,
+    load, persist, touch, useSlot, slot,
     reset() { data = blank(); persist(); return data; },
     addMon, releaseMon, mon, partyMons, toggleParty, setParty,
     addMoney, addBalls, useBall, addStone, hasStone,

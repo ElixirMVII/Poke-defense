@@ -42,7 +42,8 @@
       pal: { base: '#8a6a5a', alt: '#947264', tall: '#4a3628', block: 'rock' }, water: 0 }
   ];
 
-  const ENCOUNTER_CHANCE = 0.17;   // โอกาสเจอต่อหนึ่งก้าวบนหญ้าสูง
+  let ENCOUNTER_CHANCE = 0.17;     // โอกาสเจอต่อหนึ่งก้าวบนหญ้าสูง (หน้า admin ปรับได้)
+  let CATCH_MUL = 1;               // ตัวคูณโอกาสจับรวม
 
   /* ---------------- ตัวสุ่มแบบ seed ---------------- */
   function mulberry(seed) {
@@ -492,7 +493,8 @@
     if (enc.eating) base *= 1 - 0.22 * Math.min(enc.eating, 3);
     // ตัวเลเวลสูงจับยากขึ้นนิดหน่อย
     base *= 1 - Math.min(0.3, enc.lv * 0.008);
-    return Math.max(0.03, Math.min(0.93, base));
+    base *= CATCH_MUL;
+    return Math.max(0.03, Math.min(0.99, base));
   }
 
   function fleeChance(enc) {
@@ -773,6 +775,10 @@
     enter, update, draw, act, click, press, release, keyDown, keyUp, clearKeys, say,
     unlockedZones, zoneById, poolOf, rollWild, encounterWeight, evoStage, weightsOf,
     catchChance, fleeChance, padButtons, reachableIn,
+    get encounterChance() { return ENCOUNTER_CHANCE; },
+    set encounterChance(v) { ENCOUNTER_CHANCE = Math.max(0, Math.min(1, v)); },
+    get catchMul() { return CATCH_MUL; },
+    set catchMul(v) { CATCH_MUL = Math.max(0.01, v); },
     get state() { return S; },
     get encounter() { return S.encounter; },
     set onEncounter(fn) { S.onEncounter = fn; }

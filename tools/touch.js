@@ -2,7 +2,7 @@
 const { chromium, devices } = require('playwright');
 const path = require('path');
 const fs = require('fs');
-const { serve } = require('./server');
+const { serve, seedTestUser } = require('./server');
 
 const REPO = path.resolve(__dirname, '..');
 const SPRITES = process.env.SPRITES || '/tmp/claude-0/sprites';
@@ -24,6 +24,7 @@ fs.mkdirSync(OUT, { recursive: true });
     page.on('pageerror', e => errors.push(e.message));
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     await page.addInitScript(() => { window.PTD_SPRITE_BASE = '/sprites'; });
+    await seedTestUser(page);
     await page.goto(`http://127.0.0.1:${PORT}/index.html`);
     await page.waitForTimeout(900);
 
@@ -49,7 +50,18 @@ fs.mkdirSync(OUT, { recursive: true });
     await page.waitForTimeout(700);
     const before = await page.evaluate(() => ({ c: PTD.safari.state.tc, r: PTD.safari.state.tr }));
     const box = await page.locator('#game').boundingBox();
-    await page.touchscreen.tap(box.x + box.width * 0.55, box.y + box.height * 0.45);
+    // เล็งช่องที่เดินไปได้จริง แทนที่จะแตะกลางจอแล้วหวังว่าไม่โดนต้นไม้
+    const dest = await page.evaluate(() => {
+      const S = PTD.safari.state, g = S.map.grid, T = PTD.safari.TILE;
+      const cv = document.getElementById('game');
+      for (let r = S.tr; r < g.length; r++) for (let c = S.tc + 3; c < g[0].length; c++) {
+        if (g[r][c] === 0 || g[r][c] === 1) {      // FLOOR หรือ TALL
+          return { x: (c * T + T / 2) / cv.width, y: (r * T + T / 2) / cv.height };
+        }
+      }
+      return { x: .55, y: .45 };
+    });
+    await page.touchscreen.tap(box.x + box.width * dest.x, box.y + box.height * dest.y);
     await page.waitForTimeout(1800);
     const after = await page.evaluate(() => ({ c: PTD.safari.state.tc, r: PTD.safari.state.tr }));
     log('แตะเดิน:', JSON.stringify(before), '->', JSON.stringify(after),
@@ -59,13 +71,18 @@ fs.mkdirSync(OUT, { recursive: true });
     const padBefore = await page.evaluate(() => ({ c: PTD.safari.state.tc, r: PTD.safari.state.tr }));
     const pad = await page.evaluate(() => {
       const cv = document.getElementById('game');
-      const b = PTD.safari.padButtons().find(p => p.dir === 'left');
-      return { x: b.cx / cv.width, y: b.cy / cv.height };
+      const S = PTD.safari.state, g = S.map.grid;
+      // เลือกปุ่มที่ช่องปลายทางเดินไปได้จริง (บางทิศอาจมีต้นไม้ขวาง)
+      const ok = PTD.safari.padButtons().find(b => {
+        const r = S.tr + b.dr, c = S.tc + b.dc;
+        return r >= 0 && r < g.length && c >= 0 && c < g[0].length && (g[r][c] === 0 || g[r][c] === 1);
+      }) || PTD.safari.padButtons()[0];
+      return { x: ok.cx / cv.width, y: ok.cy / cv.height, dir: ok.dir };
     });
     await page.touchscreen.tap(box.x + box.width * pad.x, box.y + box.height * pad.y);
     await page.waitForTimeout(700);
     const padAfter = await page.evaluate(() => ({ c: PTD.safari.state.tc, r: PTD.safari.state.tr }));
-    log('ปุ่มทิศทาง:', JSON.stringify(padBefore), '->', JSON.stringify(padAfter),
+    log('ปุ่มทิศทาง (' + pad.dir + '):', JSON.stringify(padBefore), '->', JSON.stringify(padAfter),
         (padBefore.c !== padAfter.c || padBefore.r !== padAfter.r) ? '✓ ขยับ' : '✗ ไม่ขยับ');
     await page.screenshot({ path: `${OUT}/t-${label}-safari.png` });
 

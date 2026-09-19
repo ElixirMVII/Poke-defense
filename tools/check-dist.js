@@ -1,7 +1,7 @@
 /* ตรวจว่า dist/ ที่รวมไฟล์แล้วยังเล่นได้จริง และสไปรท์มาจากแพ็กที่แนบไปด้วย */
 const { chromium } = require('playwright');
 const path = require('path');
-const { serve } = require('./server');
+const { serve, seedTestUser } = require('./server');
 const PORT = 8907;
 const OUT = '/tmp/claude-0/shots';
 
@@ -18,6 +18,7 @@ const OUT = '/tmp/claude-0/shots';
     if (!u.startsWith(`http://127.0.0.1:${PORT}`) && !u.startsWith('data:')) external.push(u);
   });
 
+  await seedTestUser(page);
   await page.goto(`http://127.0.0.1:${PORT}/index.html`);
   await page.waitForTimeout(1200);
 

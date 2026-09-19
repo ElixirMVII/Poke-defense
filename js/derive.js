@@ -244,7 +244,11 @@
     });
   }
 
+  // หน้า admin แก้ค่าใน TUNE ได้ ต้องล้างแคชเพื่อให้ค่าที่คำนวณไว้สร้างใหม่
+  function rebuildTowers() { cache.clear(); }
+
   PTD.MAX_LEVEL = 30;
+  PTD.rebuildTowers = rebuildTowers;
   PTD.tower = tower;
   PTD.megaTower = megaTower;
   PTD.buildTower = buildTower;

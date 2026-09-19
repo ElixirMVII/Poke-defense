@@ -125,7 +125,7 @@
     const s = PTD.save;
     const sc = app.screen;
     const stats = [];
-    if (sc !== 'starter') {
+    if (sc !== 'starter' && sc !== 'login') {
       stats.push(`<div class="stat money"><span class="ico">₽</span><b id="money">${fmt(
         sc === 'battle' ? PTD.battle.money : s.money)}</b></div>`);
       stats.push(`<div class="stat"><span class="ico">⚪</span><b id="balls">${s.balls}</b></div>`);
@@ -147,10 +147,16 @@
       acts.push('<button id="btnQuit" class="icon" title="ออกจากด่าน">✕</button>');
     } else if (sc === 'safari') {
       acts.push('<button id="btnQuit" class="primary">กลับแผนที่โลก</button>');
-    } else if (sc !== 'starter') {
+    } else if (sc !== 'starter' && sc !== 'login') {
       acts.push('<button data-go="world" class="nav">แผนที่โลก</button>');
       acts.push('<button data-go="party" class="nav">จัดทีม</button>');
       acts.push('<button data-go="dex" class="nav">โปเกเด็กซ์</button>');
+      if (PTD.auth.isAdmin()) acts.push('<button data-go="admin" class="nav adm">ผู้ดูแล</button>');
+    }
+    const me = PTD.auth.current();
+    if (me && sc !== 'login') {
+      acts.push(`<button id="btnWho" class="icon who" title="ออกจากระบบ">${
+        me.name.slice(0, 1).toUpperCase()}</button>`);
     }
     acts.push('<button id="btnSound" class="icon" title="เสียง">🔊</button>');
     acts.push('<button id="btnHelp" class="icon" title="วิธีเล่น">?</button>');
@@ -164,6 +170,11 @@
         if (!confirm('ออกจากด่านตอนนี้? ความคืบหน้าในด่านจะหาย')) return;
       }
       app.go('world');
+    };
+    const who = $('btnWho');
+    if (who) who.onclick = () => {
+      const u = PTD.auth.current();
+      if (confirm(`กำลังเล่นเป็น ${u.name}\nออกจากระบบแล้วสลับผู้เล่น?`)) app.logout();
     };
     const snd = $('btnSound');
     if (snd) {
@@ -188,6 +199,91 @@
   }
 
   /* ---------------- หน้าเลือกตัวเริ่มต้น ---------------- */
+  /* ---------------- หน้าเข้าสู่ระบบ ---------------- */
+  let loginMode = 'pick';       // 'pick' = เลือกจากรายชื่อ, 'new' = สมัครใหม่
+
+  function showLogin() {
+    const users = PTD.auth.list();
+    const first = users.length === 0;
+    if (first) loginMode = 'new';
+
+    const body = loginMode === 'new' ? `
+      <div class="auth-form">
+        <label for="auName">ชื่อผู้เล่น</label>
+        <input type="text" id="auName" maxlength="20" placeholder="ตั้งชื่อของคุณ" autocomplete="username">
+        <label for="auPass">รหัสผ่าน <small>เว้นว่างได้ถ้าไม่อยากตั้ง</small></label>
+        <input type="password" id="auPass" placeholder="ตั้งรหัสผ่าน (ไม่บังคับ)" autocomplete="new-password">
+        <button id="auCreate" class="primary big">${first ? 'เริ่มเล่น' : 'สมัคร'}</button>
+        ${first ? '<p class="auth-note">คนแรกที่สมัครในเครื่องนี้จะได้สิทธิ์ผู้ดูแล</p>' : ''}
+        ${users.length ? '<button id="auBack" class="nav">กลับไปเลือกจากรายชื่อ</button>' : ''}
+      </div>` : `
+      <div class="auth-list">
+        ${users.map(u => `<button class="auth-user" data-uid="${u.id}">
+            <span class="au-face">${u.name.slice(0, 1).toUpperCase()}</span>
+            <span class="au-info">
+              <b>${u.name.replace(/[&<>"]/g, '')}</b>
+              <em>${u.role === 'admin' ? 'ผู้ดูแล' : 'ผู้เล่น'}${u.pass ? ' · มีรหัส' : ''}</em>
+            </span>
+          </button>`).join('')}
+      </div>
+      <div class="auth-form" id="auPassBox" hidden>
+        <label for="auPass2">รหัสผ่านของ <b id="auWho"></b></label>
+        <input type="password" id="auPass2" placeholder="กรอกรหัสผ่าน" autocomplete="current-password">
+        <button id="auGo" class="primary big">เข้าสู่ระบบ</button>
+      </div>
+      <button id="auNew" class="nav">สมัครผู้เล่นใหม่</button>`;
+
+    const d = showDom(`
+      <div class="auth-wrap">
+        <div class="auth-card">
+          <div class="auth-logo"><span class="ball"></span></div>
+          <h2 class="big-title">Poke Defense</h2>
+          <p class="lead">${first ? 'ยินดีต้อนรับ — ตั้งชื่อผู้เล่นเพื่อเริ่ม'
+                                  : 'เลือกผู้เล่นเพื่อเข้าเกม'}</p>
+          ${body}
+          <p class="auth-warn">เซฟเก็บอยู่ในเบราว์เซอร์เครื่องนี้เท่านั้น
+            รหัสผ่านใช้กันคนในบ้านสลับเซฟกัน ไม่ใช่ระบบความปลอดภัยจริง</p>
+        </div>
+      </div>`);
+
+    const doLogin = async (id, pass) => {
+      try {
+        await PTD.auth.login(id, pass);
+        app.afterLogin();
+      } catch (e) { toast(e.message); }
+    };
+
+    const cr = $('auCreate');
+    if (cr) cr.onclick = async () => {
+      try {
+        const u = await PTD.auth.register($('auName').value, $('auPass').value);
+        await PTD.auth.login(u.id, $('auPass').value);
+        app.afterLogin();
+      } catch (e) { toast(e.message); }
+    };
+    const nb = $('auNew');
+    if (nb) nb.onclick = () => { loginMode = 'new'; showLogin(); };
+    const bk = $('auBack');
+    if (bk) bk.onclick = () => { loginMode = 'pick'; showLogin(); };
+
+    let picked = null;
+    d.querySelectorAll('[data-uid]').forEach(b => b.addEventListener('click', () => {
+      const u = PTD.auth.byId(b.dataset.uid);
+      if (!u.pass) { doLogin(u.id, ''); return; }
+      picked = u.id;
+      d.querySelectorAll('.auth-user').forEach(x => x.classList.toggle('on', x === b));
+      $('auPassBox').hidden = false;
+      $('auWho').textContent = u.name;
+      $('auPass2').focus();
+    }));
+    const go = $('auGo');
+    if (go) go.onclick = () => doLogin(picked, $('auPass2').value);
+    const pw = $('auPass2');
+    if (pw) pw.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(picked, pw.value); });
+    const pw1 = $('auPass');
+    if (pw1) pw1.addEventListener('keydown', (e) => { if (e.key === 'Enter') cr.click(); });
+  }
+
   function showStarter() {
     const picks = [1, 4, 7, 25];
     const d = showDom(`
@@ -945,6 +1041,7 @@
 
   PTD.ui = {
     TOUCH, infoModal, init, syncHud, showWorld, showParty, showDex, showStarter, showCanvas,
+    showLogin, showDom,
     refresh, tick, showEnd, showEncounter, closeModal, modalOpen, toast,
     buildSafariSide
   };

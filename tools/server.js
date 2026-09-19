@@ -28,4 +28,17 @@ function serve(roots, port) {
   return new Promise(r => server.listen(port, '127.0.0.1', () => r(server)));
 }
 
-module.exports = { serve };
+/* เกมเด้งหน้าล็อกอินตอนยังไม่มีบัญชี ตัวทดสอบส่วนใหญ่ไม่ได้ทดสอบเรื่องนั้น
+ * จึงหว่านบัญชีทดสอบ (สิทธิ์ผู้ดูแล ไม่มีรหัส) ไว้ก่อนหน้าเว็บจะรัน
+ * ตัวที่ทดสอบระบบบัญชีจริง (tools/auth.js) ไม่ต้องเรียกอันนี้ */
+async function seedTestUser(page, name) {
+  await page.addInitScript((n) => {
+    localStorage.setItem('pokedefense.users.v1', JSON.stringify({
+      v: 1, currentId: 'utest',
+      users: [{ id: 'utest', name: n, role: 'admin', pass: null,
+                created: Date.now(), lastSeen: Date.now() }]
+    }));
+  }, name || 'ผู้ทดสอบ');
+}
+
+module.exports = { serve, seedTestUser };
