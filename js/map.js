@@ -9,6 +9,22 @@
 
   /* แผนที่ทั้งหมดในเกม — แต่ละอันมีเส้นทางและโทนสีของตัวเอง
    * เพิ่มแผนที่ใหม่ = เพิ่มหนึ่งก้อนตรงนี้ ที่เหลือคำนวณให้เอง */
+  /* ธีมสีต่อด่าน — เดิมมีแผนที่ 3 แบบใช้วน 10 ด่าน
+   * "ป่าลึก" "ถ้ำมืด" และ "ทะเลลึก" เลยเป็นแผนที่หินสีน้ำตาลอันเดียวกันหมด
+   * แยกรูปทางเดิน (LAYOUTS) ออกจากจานสี (THEMES) ด่านเดิมเลยดูเป็นคนละที่ */
+  const THEMES = {
+    meadow:  { grass: ['#5fa845', '#69b34c', '#74bd55'], dirt: ['#8a6a42', '#c2a06a', '#cfb17e'], decor: 'forest' },
+    forest:  { grass: ['#2f6b34', '#367a3b', '#3e8743'], dirt: ['#4a3a22', '#7d6742', '#8d7550'], decor: 'forest' },
+    urban:   { grass: ['#7c8470', '#868e79', '#919982'], dirt: ['#5c5346', '#9c917c', '#aca18c'], decor: 'mixed' },
+    lake:    { grass: ['#4f9a6a', '#58a575', '#63b080'], dirt: ['#7a6a4a', '#d4c08a', '#e0ce9c'], decor: 'mixed' },
+    cave:    { grass: ['#3c3648', '#443d52', '#4d455c'], dirt: ['#2a2530', '#6a5f78', '#7a6e88'], decor: 'rock' },
+    rocky:   { grass: ['#8a6a5a', '#947264', '#9e7c6c'], dirt: ['#5e4636', '#a8825e', '#b89070'], decor: 'rock' },
+    storm:   { grass: ['#4a5a72', '#54657e', '#5e708a'], dirt: ['#3a3f52', '#8a8f6a', '#9aa078'], decor: 'rock' },
+    sea:     { grass: ['#2c6a8e', '#32769c', '#3a83aa'], dirt: ['#6a6a4a', '#c8bd88', '#d6cb98'], decor: 'rock' },
+    volcano: { grass: ['#5a3430', '#663c36', '#72443c'], dirt: ['#3a201c', '#a8502e', '#c0603a'], decor: 'rock' },
+    summit:  { grass: ['#7a8898', '#8593a3', '#909eae'], dirt: ['#4e5a66', '#c8d2dc', '#dae2ea'], decor: 'rock' }
+  };
+
   const LAYOUTS = {
     meadow: {
       name: 'ทุ่งหญ้า',
@@ -276,9 +292,12 @@
 
   // สลับแผนที่โดยเขียนทับค่าในอ็อบเจ็กต์เดิม ไม่สร้างใหม่
   // (โมดูลอื่นถือ reference นี้ไว้ตั้งแต่ตอนโหลดแล้ว)
-  function use(id) {
-    const layout = LAYOUTS[id] || LAYOUTS.meadow;
+  function use(id, theme) {
+    const base = LAYOUTS[id] || LAYOUTS.meadow;
     ACTIVE = LAYOUTS[id] ? id : 'meadow';
+    // ธีมทับเฉพาะสีกับของตกแต่ง รูปทางเดินยังเป็นของ layout เดิม
+    const t = THEMES[theme];
+    const layout = t ? Object.assign({}, base, t) : base;
     WAYPOINTS_T = layout.waypoints;
     buildPath();
     markPath();
@@ -294,5 +313,6 @@
 
   PTD.map = map;
   PTD.MAP_LAYOUTS = LAYOUTS;
+  PTD.MAP_THEMES = THEMES;
   PTD.useMap = use;
 })(window.PTD = window.PTD || {});

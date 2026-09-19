@@ -76,15 +76,18 @@
       }
     }
 
-    // หญ้าสูงเป็นหย่อม ๆ
+    /* หญ้าสูงเป็นหย่อมกลม ๆ ไม่ใช่แถบยาวแนวนอน
+     * เดิม rh=1 เสมอ หย่อมเลยออกมาเป็นแถวเดียวยาว ๆ ดูเหมือนแปลงผัก */
     const patches = 5 + Math.floor(rnd() * 3);
     for (let i = 0; i < patches; i++) {
-      const cx = 1 + Math.floor(rnd() * (COLS - 2)), cy = 1 + Math.floor(rnd() * (ROWS - 2));
-      const rw = 1 + Math.floor(rnd() * 2), rh = 1;
+      const cx = 2 + Math.floor(rnd() * (COLS - 4)), cy = 1 + Math.floor(rnd() * (ROWS - 2));
+      const rw = 2 + Math.floor(rnd() * 2), rh = 1 + Math.floor(rnd() * 2);
       for (let r = cy - rh; r <= cy + rh; r++) for (let c = cx - rw; c <= cx + rw; c++) {
         if (r < 0 || r >= ROWS || c < 0 || c >= COLS) continue;
         if (grid[r][c] !== FLOOR) continue;
-        if (rnd() < .72) grid[r][c] = TALL;
+        // ขอบหย่อมบางลงตามระยะจากใจกลาง ได้รูปกลม ๆ แทนสี่เหลี่ยม
+        const d = Math.hypot((c - cx) / (rw + .5), (r - cy) / (rh + .5));
+        if (rnd() < 0.95 - d * 0.75) grid[r][c] = TALL;
       }
     }
 
@@ -158,67 +161,151 @@
   }
 
   /* ---------------- วาดฉากลงแคนวาสสำรอง ---------------- */
+  /* ---------------- ไทล์แบบพิกเซลอาร์ต สไตล์ Pokémon FireRed ----------------
+   * เดิมวาดหญ้าด้วยเส้นขีดสุ่ม ๆ ซึ่งดูเป็นรอยขูดมากกว่าหญ้า
+   * ของจริงในเกม GBA เป็นไทล์ 16x16 พิกเซลชัด ๆ มีสามโทน (เข้ม/กลาง/สว่าง)
+   * ที่นี่จึงวาดลงผืน 16x16 ก่อนแล้วค่อยขยาย 3 เท่าแบบไม่เกลี่ยขอบ
+   * ได้ขอบพิกเซลคมเหมือนต้นฉบับ และเข้ากับสไปรท์ BW ที่ใช้อยู่ */
+  const PXW = 16;                       // ความละเอียดตรรกะของหนึ่งไทล์
+  const SCALE = TILE / PXW;             // 48 / 16 = 3
+
+  // แผ่นวาดขนาด 16x16 ใช้ซ้ำ แล้ว blit ขยายลงผืนจริง
+  function pxTile(draw) {
+    const cv = document.createElement('canvas');
+    cv.width = PXW; cv.height = PXW;
+    const g = cv.getContext('2d');
+    draw(g, (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); });
+    return cv;
+  }
+
+  // ไล่เฉดสี: ใช้สีฐานของโซนแล้วปรับความสว่างเอา จะได้ทุกโซนมีสามโทนเข้าชุดกัน
+  function shade(hex, k) {
+    const n = parseInt(hex.slice(1), 16);
+    const f = (v) => Math.max(0, Math.min(255, Math.round(v * k)));
+    return '#' + [f(n >> 16 & 255), f(n >> 8 & 255), f(n & 255)]
+      .map(v => v.toString(16).padStart(2, '0')).join('');
+  }
+
+  /* หญ้าสูง — ใจกลางของหน้าตาแบบ FireRed
+   * กอหญ้าเป็นใบแหลมปลายมน เรียงติดกันจนเต็มไทล์ ต่อกันได้ไม่เห็นรอยต่อ
+   * ใบวางที่ตำแหน่ง x คงที่ (ไม่สุ่ม) ไทล์ที่ติดกันจึงเรียงเป็นผืนเดียว */
+  function tallGrassTile(pal) {
+    const out  = shade(pal.tall, .6),
+          dark = shade(pal.tall, .8),
+          mid  = pal.tall,
+          lite = shade(pal.tall, 1.3),
+          tip  = shade(pal.tall, 1.58);
+    // ใบหญ้า [x, สูง] เรียงถี่จนต่อกันเป็นผืน ปลายลดหลั่นไม่เท่ากัน
+    // [x, สูง, โคนอยู่แถวไหน] — โคนไม่เท่ากันด้วย ฐานกอจะได้ไม่เป็นเส้นตรงเป๊ะ
+    const blades = [[0, 8, 15], [3, 11, 14], [6, 6, 15], [8, 10, 14], [11, 7, 15], [13, 9, 14]];
+    return pxTile((g, px) => {
+      for (const [bx, bh, bottom] of blades) {
+        for (let i = 0; i < bh; i++) {
+          const y = bottom - i;
+          const f = i / (bh - 1);                     // 0 ที่โคน, 1 ที่ปลาย
+          const w = f > .72 ? 1 : (f > .38 ? 2 : 3);  // เรียวขึ้นไปหาปลายจริง ๆ
+          px(bx, y, w, 1, mid);
+          px(bx, y, 1, 1, lite);                      // ไฮไลต์ขอบซ้าย
+          if (w > 1) px(bx + w - 1, y, 1, 1, dark);   // เงาขอบขวา
+          if (f > .8) px(bx, y, 1, 1, tip);           // ปลายใบสว่าง
+        }
+      }
+      // เงาที่โคนเฉพาะใต้ใบ ไม่ลากเป็นคานเต็มความกว้าง (เดิมดูเหมือนรั้ว)
+      for (const [bx, , bottom] of blades) {
+        px(bx, bottom, 3, 1, dark);
+        if (bottom < 15) px(bx + 1, bottom + 1, 2, 1, out);
+      }
+    });
+  }
+
+  /* พื้นหญ้าเตี้ย — เรียบ ๆ มีจุดประให้ไม่แบนจนเกินไป */
+  function groundTile(pal, alt) {
+    // สลับเฉดกันนิดเดียวพอให้มีผิว ถ้าต่างมากจะเห็นเป็นกระดานหมากรุก
+    const base = alt ? shade(pal.base, 1.035) : pal.base;
+    const dk = shade(base, .93), lt = shade(base, 1.06);
+    return pxTile((g, px) => {
+      px(0, 0, 16, 16, base);
+      // ลายประจุดคงที่ ไม่สุ่ม ทุกไทล์เลยเหมือนกันและต่อกันเนียน
+      const dots = [[2, 3], [9, 1], [13, 6], [5, 8], [11, 11], [1, 13], [7, 14]];
+      for (const [x, y] of dots) { px(x, y, 2, 1, dk); px(x, y + 1, 1, 1, lt); }
+    });
+  }
+
+  /* ทางเดินดิน */
+  function pathTile() {
+    return pxTile((g, px) => {
+      px(0, 0, 16, 16, '#d8c088');
+      const dots = [[3, 2], [10, 5], [6, 9], [13, 12], [1, 7]];
+      for (const [x, y] of dots) px(x, y, 2, 2, '#c4a870');
+    });
+  }
+
+  /* น้ำ — มีคลื่นขาวสองแถวแบบไทล์น้ำใน GBA */
+  function waterTile(frame) {
+    const o = frame ? 4 : 0;
+    return pxTile((g, px) => {
+      px(0, 0, 16, 16, '#4878c8');
+      px(0, 0, 16, 8, '#5888d8');
+      px((2 + o) % 16, 3, 5, 1, '#a8d0f8');
+      px((9 + o) % 16, 7, 4, 1, '#a8d0f8');
+      px((5 + o) % 16, 11, 5, 1, '#88b8e8');
+      px((12 + o) % 16, 14, 3, 1, '#88b8e8');
+    });
+  }
+
   function renderTerrain(zone, grid) {
     const cv = document.createElement('canvas');
     cv.width = W; cv.height = H;
     const g = cv.getContext('2d');
+    g.imageSmoothingEnabled = false;      // ต้องคมเป็นพิกเซล ห้ามเกลี่ยขอบ
     const P = zone.pal;
+
+    // สร้างไทล์ครั้งเดียวต่อโซน แล้ววางซ้ำ เร็วกว่าวาดทีละช่อง
+    const T = {
+      ground: [groundTile(P, false), groundTile(P, true)],
+      tall: tallGrassTile(P),
+      path: pathTile(),
+      water: waterTile(0)
+    };
+    const put = (tile, c, r) => g.drawImage(tile, 0, 0, PXW, PXW, c * TILE, r * TILE, TILE, TILE);
+
     let seed = 4242;
     const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
 
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-      const x = c * TILE, y = r * TILE, t = grid[r][c];
-      g.fillStyle = (r + c) % 2 ? P.base : P.alt;
-      g.fillRect(x, y, TILE, TILE);
-
-      if (t === WATER) {
-        g.fillStyle = '#3a78b8';
-        g.fillRect(x, y, TILE, TILE);
-        g.fillStyle = 'rgba(255,255,255,.14)';
-        for (let i = 0; i < 3; i++) g.fillRect(x + 4 + rnd() * 30, y + 8 + i * 13, 12, 2);
-      } else if (t === TALL) {
-        g.fillStyle = P.tall;
-        g.fillRect(x, y, TILE, TILE);
-        // ขอบเข้มรอบช่อง ทำให้แยกออกจากพื้นหญ้าธรรมดาชัดเจน
-        g.strokeStyle = 'rgba(0,0,0,.22)';
-        g.lineWidth = 2;
-        g.strokeRect(x + 1, y + 1, TILE - 2, TILE - 2);
-        g.lineCap = 'round';
-        for (let i = 0; i < 10; i++) {
-          const bx = x + 4 + rnd() * (TILE - 8), by = y + TILE - 2;
-          const h = 12 + rnd() * 12;
-          g.strokeStyle = 'rgba(0,0,0,.28)'; g.lineWidth = 3;
-          g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + (rnd() - .5) * 9, by - h); g.stroke();
-          g.strokeStyle = 'rgba(190,255,150,.34)'; g.lineWidth = 1.6;
-          g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + (rnd() - .5) * 9, by - h); g.stroke();
-        }
-      } else if (t === PATH) {
-        g.fillStyle = '#c9ab7c';
-        g.fillRect(x, y, TILE, TILE);
-      } else if (t === BLOCK) {
-        if (P.block === 'tree') {
-          g.fillStyle = 'rgba(0,0,0,.22)';
-          g.beginPath(); g.ellipse(x + 24, y + 40, 14, 5, 0, 0, TAU); g.fill();
-          g.fillStyle = '#7a5230'; g.fillRect(x + 21, y + 26, 6, 14);
-          const leaf = ['#2f7a35', '#357f38', '#2a6f30'];
-          for (let i = 0; i < 3; i++) {
-            g.fillStyle = leaf[i];
-            g.beginPath(); g.arc(x + 24 + (i - 1) * 8, y + 22 - i * 5 + (i === 1 ? 0 : 3), 12 - i * 1.5, 0, TAU); g.fill();
-          }
-        } else {
-          g.fillStyle = 'rgba(0,0,0,.22)';
-          g.beginPath(); g.ellipse(x + 24, y + 38, 15, 5, 0, 0, TAU); g.fill();
-          g.fillStyle = '#8f8f9a';
-          g.beginPath();
-          g.moveTo(x + 8, y + 38); g.lineTo(x + 13, y + 16); g.lineTo(x + 28, y + 11);
-          g.lineTo(x + 40, y + 24); g.lineTo(x + 36, y + 38);
-          g.closePath(); g.fill();
-          g.fillStyle = 'rgba(255,255,255,.2)';
-          g.beginPath(); g.moveTo(x + 15, y + 20); g.lineTo(x + 27, y + 15); g.lineTo(x + 20, y + 28); g.closePath(); g.fill();
-        }
-      }
+      const t = grid[r][c];
+      put(T.ground[(r + c) % 2], c, r);
+      if (t === WATER) put(T.water, c, r);
+      else if (t === TALL) put(T.tall, c, r);
+      else if (t === PATH) put(T.path, c, r);
+      else if (t === BLOCK) drawBlock(g, P, c, r, rnd);
     }
     return cv;
+  }
+
+  /* ต้นไม้กับก้อนหินวาดเป็นพิกเซลอาร์ตเหมือนกัน จะได้เข้าชุดกับพื้น */
+  function drawBlock(g, P, c, r, rnd) {
+    const x = c * TILE, y = r * TILE;
+    const S = SCALE;
+    const px = (a, b, w, h, col) => { g.fillStyle = col; g.fillRect(x + a * S, y + b * S, w * S, h * S); };
+    if (P.block === 'tree') {
+      px(3, 13, 10, 2, 'rgba(0,0,0,.24)');            // เงา
+      px(7, 10, 2, 4, '#6b4423');                      // ลำต้น
+      px(7, 10, 1, 4, '#8a5a2e');
+      const cz = [[3, 3, 10, 7], [2, 5, 12, 4], [4, 2, 8, 2]];
+      for (const [a, b, w, h] of cz) px(a, b, w, h, '#2f7a35');
+      px(4, 3, 7, 2, '#3f9243');                       // ไฮไลต์บน
+      px(4, 2, 4, 1, '#55a855');
+      px(3, 8, 10, 2, '#245f2a');                      // เงาใต้พุ่ม
+    } else {
+      px(3, 13, 10, 2, 'rgba(0,0,0,.24)');
+      px(3, 8, 10, 6, '#8f8f9a');
+      px(4, 5, 8, 3, '#9d9da8');
+      px(5, 3, 6, 2, '#a8a8b4');
+      px(5, 3, 3, 1, '#c0c0cc');                       // ไฮไลต์
+      px(4, 6, 2, 2, '#b4b4c0');
+      px(3, 12, 10, 2, '#6e6e78');                     // ฐานเข้ม
+    }
   }
 
   /* ---------------- ตัวผู้เล่น ---------------- */
@@ -285,6 +372,24 @@
   function poolOf(zone) {
     const ids = PTD.DEX.filter(d => !d.lg && zone.hb.includes(d.hb)).map(d => d.id);
     return ids.length ? ids : PTD.DEX.filter(d => !d.lg).map(d => d.id);
+  }
+
+  /* สายพันธุ์ที่ "เจอได้จริง" ในโซนนี้ — โอกาสเจออย่างน้อย MIN_SHOW ของทั้งหมด
+   *
+   * ตารางน้ำหนักมีหางยาวมาก ทุ่งหญ้าต้นทางระบุไว้ 35 สายพันธุ์ แต่ 12 ตัว
+   * โอกาสเจอต่ำกว่า 0.1% (ร่างสุดท้ายอย่าง Nidoqueen/Vileplume ที่ควรได้จาก
+   * การวิวัฒนาการ ไม่ใช่จากหญ้า) จำลองแล้วกว่าจะเห็นครบ 30 ตัวต้องเจอตัวป่า
+   * 11,447 ครั้ง ตัวนับ "จับแล้ว x/35" จึงเป็นเป้าที่ไปไม่ถึงตลอดกาล
+   * นับเฉพาะตัวที่เจอได้จริงแทน ส่วนที่เหลือบอกแยกว่าได้จากการวิวัฒนาการ */
+  const MIN_SHOW = 0.01;
+  const reachCache = new Map();
+  function reachableIn(zone) {
+    if (reachCache.has(zone.id)) return reachCache.get(zone.id);
+    const t = weightsOf(zone);
+    const ids = t.pool.filter((id, i) => t.w[i] / t.total >= MIN_SHOW);
+    const out = ids.length ? ids : t.pool.slice();
+    reachCache.set(zone.id, out);
+    return out;
   }
 
   // ขั้นวิวัฒนาการ: 0 = ร่างแรก, 1 = ร่างกลาง, 2 = ร่างสุดท้าย
@@ -667,7 +772,7 @@
     ZONES, W, H, TILE,
     enter, update, draw, act, click, press, release, keyDown, keyUp, clearKeys, say,
     unlockedZones, zoneById, poolOf, rollWild, encounterWeight, evoStage, weightsOf,
-    catchChance, fleeChance, padButtons,
+    catchChance, fleeChance, padButtons, reachableIn,
     get state() { return S; },
     get encounter() { return S.encounter; },
     set onEncounter(fn) { S.onEncounter = fn; }

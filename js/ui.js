@@ -234,7 +234,8 @@
     }).join('');
 
     const zones = PTD.safari.unlockedZones().map(({ zone, unlocked }) => {
-      const pool = PTD.safari.poolOf(zone);
+      // นับเฉพาะตัวที่เจอได้จริงในโซน ไม่ใช่ทุกตัวที่ถิ่นอาศัยตรงกัน
+      const pool = PTD.safari.reachableIn(zone);
       const caught = pool.filter(id => s.data.caught.includes(id)).length;
       return `<button class="loc zone ${unlocked ? '' : 'locked'}"
                 data-zone="${zone.id}" ${unlocked ? '' : 'disabled'}>
@@ -488,7 +489,7 @@
   function buildSafariSide() {
     const S = PTD.safari.state;
     const zone = S.zone;
-    const pool = PTD.safari.poolOf(zone);
+    const pool = PTD.safari.reachableIn(zone);
     const s = PTD.save;
     $('side').innerHTML = `
       <div class="panel">
@@ -501,7 +502,13 @@
         <div class="kv"><span>จับครบแล้ว</span><b>${pool.filter(i => s.data.caught.includes(i)).length}/${pool.length}</b></div>
       </div>
       <div class="panel">
-        <h3 class="side-h">พบได้ในโซนนี้</h3>
+        <h3 class="side-h">พบได้ในโซนนี้ <small>${pool.length} สายพันธุ์</small></h3>
+        ${(() => {
+          const all = PTD.safari.poolOf(zone).length;
+          return all > pool.length
+            ? `<p class="side-note">อีก ${all - pool.length} สายพันธุ์ในถิ่นนี้เป็นร่างวิวัฒนาการ
+                 — ไม่โผล่จากหญ้า ต้องจับร่างแรกไปเลี้ยงเอง</p>` : '';
+        })()}
         <div class="zone-list">${pool.map(id =>
           `<div class="zl ${s.data.caught.includes(id) ? 'got' : ''}" data-tip-mon="${id}">
             <img class="psprite tiny ${s.data.caught.includes(id) ? '' : 'unknown'}"

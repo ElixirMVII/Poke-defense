@@ -596,7 +596,7 @@
       this.quest = cfg.quest || null;
 
       const src = this.stage || this.quest;
-      PTD.useMap(src.map);
+      PTD.useMap(src.map, src.theme);
 
       this.waves = this.stage ? PTD.campaign.stageWaves(this.stage)
                               : PTD.campaign.questWaves(this.quest);
