@@ -20,28 +20,68 @@
   let BASE = window.PTD_SPRITE_BASE ||
     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon';
 
-  // โหมดแพ็ก: GIF ทั้งหมดถูกต่อกันเป็นไฟล์เดียวพร้อมดัชนี
-  // ใช้ตอนเผยแพร่เป็นหน้าเว็บ ซึ่งจำกัดจำนวนไฟล์ที่แนบได้
-  // window.PTD_ANIM_PACK = { b64: 'sprites/anim.b64.txt', idx: 'sprites/anim.json' }
-  // เก็บเป็น base64 ในไฟล์ข้อความ เพราะที่เผยแพร่รับเฉพาะชนิดไฟล์มาตรฐานของเว็บ
-  const PACK = window.PTD_ANIM_PACK || null;
-  let packPromise = null, packBuf = null, packIdx = null;
+  /* โหมดแพ็ก: สไปรท์ทั้งหมดถูกต่อกันเป็นก้อนเดียวพร้อมดัชนี
+   * ใช้ตอนเผยแพร่เป็นหน้าเว็บ ซึ่งจำกัดทั้งจำนวนไฟล์ (255) และขนาดไฟล์ (16 MB)
+   *   window.PTD_ANIM_PACK  = { idx: 'sprites/anim.json' }
+   *   window.PTD_STILL_PACK = { idx: 'sprites/still.json' }
+   * ไฟล์ดัชนีบอกว่าก้อนข้อมูลถูกหั่นเป็นกี่ชิ้นและแต่ละตัวอยู่ตำแหน่งไหน
+   * เก็บเป็น base64 ในไฟล์ข้อความ เพราะที่เผยแพร่รับเฉพาะชนิดไฟล์มาตรฐานของเว็บ
+   * (386 ตัวรวมกัน GIF 14 MB -> base64 ~19 MB จึงต้องหั่น) */
+  function makePack(cfg) {
+    if (!cfg) return null;
+    const p = { cfg, promise: null, buf: null, idx: null };
+    p.load = () => {
+      if (p.promise) return p.promise;
+      p.promise = (async () => {
+        const meta = await (await fetch(cfg.idx)).json();
+        p.idx = meta.index || meta;            // รองรับดัชนีรูปแบบเก่าด้วย
+        const parts = meta.parts || [cfg.b64];
+        const texts = await Promise.all(parts.map(u => fetch(u).then(r => {
+          if (!r.ok) throw new Error('โหลดแพ็กสไปรท์ไม่ได้: ' + u);
+          return r.text();
+        })));
+        // ถอด base64 ทีละชิ้นแล้วต่อกัน — แต่ละชิ้นหารด้วย 4 ลงตัวเสมอ
+        const bins = texts.map(t => atob(t.trim()));
+        const total = bins.reduce((n, b) => n + b.length, 0);
+        const arr = new Uint8Array(total);
+        let at = 0;
+        for (const bin of bins) {
+          for (let i = 0; i < bin.length; i++) arr[at + i] = bin.charCodeAt(i);
+          at += bin.length;
+        }
+        p.buf = arr.buffer;
+      })();
+      return p.promise;
+    };
+    p.slice = async (id) => {
+      await p.load();
+      const ent = p.idx[id];
+      return ent ? p.buf.slice(ent[0], ent[0] + ent[1]) : null;
+    };
+    return p;
+  }
 
-  function loadPack() {
-    if (packPromise) return packPromise;
-    packPromise = (async () => {
-      const [idxR, binR] = await Promise.all([fetch(PACK.idx), fetch(PACK.b64)]);
-      if (!idxR.ok || !binR.ok) throw new Error('โหลดแพ็กสไปรท์ไม่ได้');
-      packIdx = await idxR.json();
-      const bin = atob((await binR.text()).trim());
-      const arr = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-      packBuf = arr.buffer;
-    })();
-    return packPromise;
+  const PACK = makePack(window.PTD_ANIM_PACK);
+
+  /* ภาพนิ่งถูกแนบมาเป็น data: URL ในไฟล์เดียว (รวมกันแค่ ~340 KB)
+   * โหลดครั้งเดียวตอนบูตแล้วเก็บไว้ในหน่วยความจำ stillURL() จึงยังคืนค่าทันที
+   * ไม่ต้องแก้ทุกที่ที่เอาไปใส่ <img src> โดยตรง */
+  const STILL_CFG = window.PTD_STILL_PACK || null;
+  let stillMap = null;
+  const BLANK = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+
+  function loadStills() {
+    if (!STILL_CFG) return Promise.resolve();
+    return fetch(STILL_CFG.idx)
+      .then(r => r.json())
+      .then(m => { stillMap = m; })
+      .catch(e => console.warn('โหลดภาพนิ่งที่แนบมาไม่ได้:', e.message));
   }
   const animURL  = (id) => `${BASE}/versions/generation-v/black-white/animated/${id}.gif`;
-  const stillURL = (id) => `${BASE}/${id}.png`;
+  const stillURL = (id) => {
+    if (STILL_CFG) return (stillMap && stillMap[id]) || BLANK;
+    return `${BASE}/${id}.png`;
+  };
 
   const MAX_FRAMES = 28;      // เก็บไว้ไม่เกินนี้ต่อหนึ่งตัว กันกินแรม
   const MAX_PARALLEL = 6;     // โหลดพร้อมกันได้กี่ตัว
@@ -92,12 +132,7 @@
 
   /* ---------- ทางหลัก: ถอดเฟรมจาก GIF ---------- */
   async function animData(id) {
-    if (PACK) {
-      await loadPack();
-      const ent = packIdx[id];
-      if (!ent) return null;
-      return packBuf.slice(ent[0], ent[0] + ent[1]);
-    }
+    if (PACK) return await PACK.slice(id);
     const resp = await fetch(animURL(id));
     if (!resp.ok) return null;
     return await resp.arrayBuffer();
@@ -257,7 +292,7 @@
 
   PTD.sprites = {
     draw, metrics,
-    stillURL,
+    stillURL, loadStills,
     preload(ids) { for (const id of ids) entryFor(id); },
     setBase(url) { BASE = url.replace(/\/$/, ''); cache.clear(); },
     get ready() { let n = 0; for (const e of cache.values()) if (e.state === 'ready') n++; return n; },

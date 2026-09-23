@@ -247,7 +247,8 @@
   // หน้า admin แก้ค่าใน TUNE ได้ ต้องล้างแคชเพื่อให้ค่าที่คำนวณไว้สร้างใหม่
   function rebuildTowers() { cache.clear(); }
 
-  PTD.MAX_LEVEL = 30;
+  // แคมเปญ 18 ด่าน ถ้าเพดานอยู่ที่ 30 จะตันตั้งแต่ด่าน 11 แล้วเงินไม่มีที่ใช้อีก
+  PTD.MAX_LEVEL = 55;
   PTD.rebuildTowers = rebuildTowers;
   PTD.tower = tower;
   PTD.megaTower = megaTower;

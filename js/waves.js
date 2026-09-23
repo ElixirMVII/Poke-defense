@@ -60,9 +60,19 @@
     if (o.pool && o.pool.length) {
       const allow = new Set(o.pool);
       const filtered = roster.filter(d => allow.has(d.id));
-      // ถิ่นอาศัยบางแห่งมีสมาชิกน้อย ถ้าน้อยเกินไปก็ผสมตัวอื่นเข้าไปด้วย
-      roster = filtered.length >= 12 ? filtered
-             : filtered.concat(roster.filter(d => !allow.has(d.id)).slice(0, 24));
+      /* ถิ่นอาศัยบางแห่งมีสมาชิกน้อย ถ้าน้อยเกินไปก็ต้องผสมตัวอื่นเข้าไป
+       * แต่ต้องเติมจาก "ช่วง id เดียวกับพูลเดิม" ไม่ใช่จากต้นเด็กซ์
+       * ไม่งั้นด่านโจโต/โฮเอ็นจะมีตัวคันโตโผล่มาปนจนธีมภูมิภาคพัง */
+      if (filtered.length < 12) {
+        const lo = Math.min(...o.pool), hi = Math.max(...o.pool);
+        const near = roster
+          .filter(d => !allow.has(d.id) && d.id >= lo && d.id <= hi)
+          .sort((a, b) => a.bst - b.bst);
+        roster = filtered.concat(near.slice(0, 24 - filtered.length));
+        if (roster.length < 8) roster = filtered.concat(near);   // เผื่อยังไม่พออีก
+      } else {
+        roster = filtered;
+      }
     }
     // เรียงตาม "ความน่ากลัวจริง" (อึดหลังคิดเกราะ) ไม่ใช่ BST
     // เพราะ BST ไม่บอกว่าตัวไหนแทงไม่เข้า — Chansey BST แค่ 450 แต่อึดกว่าใครในเกม

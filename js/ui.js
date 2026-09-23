@@ -139,7 +139,7 @@
         stats.push(`<div class="stat heart"><span class="ico">❤</span><b id="lives">${PTD.battle.lives}</b></div>`);
         stats.push(`<div class="stat"><span class="lbl">เวฟ</span><b id="wave">–</b></div>`);
       } else {
-        stats.push(`<div class="stat"><span class="lbl">เด็กซ์</span><b>${s.dexCaught}/151</b></div>`);
+        stats.push(`<div class="stat"><span class="lbl">เด็กซ์</span><b>${s.dexCaught}/${PTD.DEX.length}</b></div>`);
         stats.push(`<div class="stat"><span class="lbl">ทีม</span><b>${s.data.party.length}/6</b></div>`);
       }
     }
@@ -331,7 +331,7 @@
         <div class="loc-desc">${open ? st.desc : 'ต้องผ่านด่านก่อนหน้าก่อน'}</div>
         <div class="loc-meta">${st.waves} เวฟ · ${st.lives} หัวใจ · แผนที่${PTD.MAP_LAYOUTS[st.map].name}</div>
         ${open ? `<div class="loc-reward">รางวัล ₽${fmt(st.reward.money)} · บอล ${st.reward.balls}${
-          st.reward.stone ? ` · หิน${PTD.megasOf(st.reward.stone)[0].stone}` : ''}</div>` : ''}
+          st.reward.stone ? ` · หิน ${PTD.megasOf(st.reward.stone)[0].stone}` : ''}</div>` : ''}
       </button>`;
     }).join('');
 
@@ -586,7 +586,7 @@
     const d = showDom(`
       <div class="wide">
         <h1 class="big-title">โปเกเด็กซ์</h1>
-        <p class="lead">เจอแล้ว <b>${s.dexSeen}</b> · จับได้ <b>${s.dexCaught}</b> จาก 151 ตัว</p>
+        <p class="lead">เจอแล้ว <b>${s.dexSeen}</b> · จับได้ <b>${s.dexCaught}</b> จาก ${PTD.DEX.length} ตัว</p>
         <div class="dex-grid">${cells}</div>
       </div>`);
     bindTips(d);

@@ -163,8 +163,11 @@
 
       /* ---- หน้าจอแรก ---- */
       PTD.admin.init(this);
-      if (!PTD.auth.current()) this.go('login');
-      else this.afterLogin();
+      // ภาพนิ่งที่แนบมากับหน้าเว็บต้องพร้อมก่อนวาดหน้าแรก ไม่งั้นรูปจะว่างหมด
+      PTD.sprites.loadStills().then(() => {
+        if (!PTD.auth.current()) this.go('login');
+        else this.afterLogin();
+      });
 
       /* ---- ลูปหลัก ---- */
       let last = performance.now();

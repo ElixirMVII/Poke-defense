@@ -18,28 +18,55 @@
   /* ---------------- นิยามโซน ---------------- */
   // hb = habitat_id ของ PokeAPI: 1 ถ้ำ, 2 ป่า, 3 ทุ่งหญ้า, 4 ภูเขา,
   //                              5 หายาก, 6 ทุรกันดาร, 7 ทะเล, 8 เมือง, 9 ริมน้ำ
+  /* โซนซาฟารี — 12 โซน แบ่งตามภูมิภาค
+   *   stageW  น้ำหนักการเจอตามขั้นวิวัฒนาการ [ร่างแรก, ร่างกลาง, ร่างสุดท้าย]
+   *   bstCap  ค่าพลังรวมที่ถือว่า "ปกติ" ของโซนนี้ เกินจากนี้เจอยากขึ้นเรื่อย ๆ
+   *   ids     ช่วง id ของภูมิภาค — โซนโจโตจะไม่มีตัวคันโตโผล่มา
+   * โซนต้น ๆ เจอแต่ตัวอ่อน ต้องเลี้ยงเอง ไม่ใช่เดินไปจับตัวเทพมาเลย */
+  const K = [1, 151], J = [152, 251], HO = [252, 386];
+  const PAL = {
+    grass:  { base: '#6fb552', alt: '#78bd5a', tall: '#2f6b28', block: 'tree' },
+    forest: { base: '#4e8f46', alt: '#579a4c', tall: '#1f4d22', block: 'tree' },
+    town:   { base: '#9a9a86', alt: '#a4a48e', tall: '#4a6238', block: 'rock' },
+    cave:   { base: '#5a5464', alt: '#645d70', tall: '#2a323a', block: 'rock' },
+    volcano:{ base: '#8a6a5a', alt: '#947264', tall: '#4a3628', block: 'rock' },
+    snow:   { base: '#b8c4cc', alt: '#c2ccd4', tall: '#5a7a86', block: 'rock' },
+    sand:   { base: '#cbb479', alt: '#d4bf87', tall: '#8a7a3e', block: 'rock' },
+    marsh:  { base: '#6a8a5e', alt: '#749668', tall: '#3a5a2e', block: 'tree' }
+  };
+
   const ZONES = [
-    // stageW = น้ำหนักการเจอตามขั้นวิวัฒนาการ [ร่างแรก, ร่างกลาง, ร่างสุดท้าย]
-    // bstCap = ค่าพลังรวมที่ถือว่า "ปกติ" ของโซนนี้ เกินจากนี้จะเจอยากขึ้นเรื่อย ๆ
-    // โซนต้น ๆ จึงเจอแต่ตัวอ่อน ต้องเลี้ยงเอง ไม่ใช่เดินไปจับตัวเทพมาเลย
-    { id: 'route',    name: 'ทุ่งหญ้าต้นทาง', hb: [3],    lv: [3, 7],   need: 0,
-      stageW: [1, .06, 0], bstCap: 330,
-      pal: { base: '#6fb552', alt: '#78bd5a', tall: '#2f6b28', block: 'tree' }, water: 0 },
-    { id: 'forest',   name: 'ป่าลึก',        hb: [2],    lv: [5, 11],  need: 1,
-      stageW: [1, .16, .01], bstCap: 370,
-      pal: { base: '#4e8f46', alt: '#579a4c', tall: '#1f4d22', block: 'tree' }, water: 0 },
-    { id: 'town',     name: 'ชานเมืองเก่า',  hb: [8],    lv: [8, 15],  need: 2,
-      stageW: [1, .30, .04], bstCap: 385,
-      pal: { base: '#9a9a86', alt: '#a4a48e', tall: '#4a6238', block: 'rock' }, water: 0 },
-    { id: 'lake',     name: 'ริมทะเลสาบ',    hb: [9, 7], lv: [11, 19], need: 4,
-      stageW: [.9, .48, .11], bstCap: 420,
-      pal: { base: '#6fb552', alt: '#78bd5a', tall: '#2f6b28', block: 'tree' }, water: .30 },
-    { id: 'cave',     name: 'ถ้ำมืด',        hb: [1, 6], lv: [14, 23], need: 6,
-      stageW: [.7, .70, .26], bstCap: 460,
-      pal: { base: '#5a5464', alt: '#645d70', tall: '#2a323a', block: 'rock' }, water: .08 },
-    { id: 'mountain', name: 'ภูเขาไฟ',       hb: [4],    lv: [18, 28], need: 8,
-      stageW: [.45, .85, .55], bstCap: 540,
-      pal: { base: '#8a6a5a', alt: '#947264', tall: '#4a3628', block: 'rock' }, water: 0 }
+    // ---- คันโต ----
+    { id: 'route',    name: 'ทุ่งหญ้าต้นทาง', hb: [3],    ids: K,  lv: [3, 7],   need: 0,
+      stageW: [1, .06, 0],    bstCap: 330, pal: PAL.grass,  water: 0 },
+    { id: 'forest',   name: 'ป่าลึก',         hb: [2],    ids: K,  lv: [5, 11],  need: 1,
+      stageW: [1, .16, .01],  bstCap: 370, pal: PAL.forest, water: 0 },
+    { id: 'town',     name: 'ชานเมืองเก่า',   hb: [8],    ids: K,  lv: [8, 15],  need: 2,
+      stageW: [1, .30, .04],  bstCap: 385, pal: PAL.town,   water: 0 },
+    { id: 'lake',     name: 'ริมทะเลสาบ',     hb: [9, 7], ids: K,  lv: [11, 19], need: 3,
+      stageW: [.9, .48, .11], bstCap: 420, pal: PAL.grass,  water: .30 },
+    { id: 'cave',     name: 'ถ้ำมืด',         hb: [1, 6], ids: K,  lv: [14, 23], need: 4,
+      stageW: [.7, .70, .26], bstCap: 460, pal: PAL.cave,   water: .08 },
+    { id: 'mountain', name: 'ภูเขาไฟคันโต',   hb: [4],    ids: K,  lv: [18, 28], need: 5,
+      stageW: [.45, .85, .55], bstCap: 540, pal: PAL.volcano, water: 0 },
+    // ---- โจโต ----
+    { id: 'j-route',  name: 'ทุ่งโจโต',       hb: [3, 2], ids: J,  lv: [16, 24], need: 6,
+      stageW: [1, .22, .02],  bstCap: 380, pal: PAL.grass,  water: 0 },
+    { id: 'j-marsh',  name: 'บึงน้ำโจโต',     hb: [9, 7], ids: J,  lv: [20, 29], need: 8,
+      stageW: [.9, .50, .12], bstCap: 430, pal: PAL.marsh,  water: .34 },
+    { id: 'j-tower',  name: 'หอระฆังเก่า',    hb: [8, 5], ids: J,  lv: [23, 32], need: 10,
+      stageW: [.6, .75, .32], bstCap: 480, pal: PAL.town,   water: 0 },
+    { id: 'j-ice',    name: 'ถ้ำน้ำแข็ง',     hb: [1, 6, 4], ids: J, lv: [26, 36], need: 11,
+      stageW: [.4, .85, .60], bstCap: 540, pal: PAL.snow,   water: .06 },
+    // ---- โฮเอ็น ----
+    { id: 'h-jungle', name: 'ป่าฝนโฮเอ็น',    hb: [2, 3], ids: HO, lv: [24, 33], need: 12,
+      stageW: [1, .30, .05],  bstCap: 400, pal: PAL.forest, water: .05 },
+    { id: 'h-sea',    name: 'ทะเลโฮเอ็น',     hb: [7, 9], ids: HO, lv: [28, 38], need: 14,
+      stageW: [.85, .55, .18], bstCap: 450, pal: PAL.grass, water: .42 },
+    { id: 'h-desert', name: 'ทะเลทรายร้อน',   hb: [6, 4], ids: HO, lv: [32, 42], need: 15,
+      stageW: [.5, .80, .45], bstCap: 510, pal: PAL.sand,   water: 0 },
+    { id: 'h-sky',    name: 'หอคอยฟ้า',       hb: [5, 4, 1], ids: HO, lv: [36, 48], need: 17,
+      stageW: [.3, .80, .75], bstCap: 600, pal: PAL.snow,   water: 0 }
   ];
 
   let ENCOUNTER_CHANCE = 0.17;     // โอกาสเจอต่อหนึ่งก้าวบนหญ้าสูง (หน้า admin ปรับได้)
@@ -371,8 +398,11 @@
   function zoneById(id) { return ZONES.find(z => z.id === id); }
 
   function poolOf(zone) {
-    const ids = PTD.DEX.filter(d => !d.lg && zone.hb.includes(d.hb)).map(d => d.id);
-    return ids.length ? ids : PTD.DEX.filter(d => !d.lg).map(d => d.id);
+    const [lo, hi] = zone.ids || [1, 9999];
+    const inRegion = (d) => !d.lg && d.id >= lo && d.id <= hi;
+    const ids = PTD.DEX.filter(d => inRegion(d) && zone.hb.includes(d.hb)).map(d => d.id);
+    // ถิ่นอาศัยบางแห่งในภูมิภาคนั้นมีน้อย ก็เปิดให้ทั้งภูมิภาคแทน (ไม่ข้ามภูมิภาค)
+    return ids.length >= 8 ? ids : PTD.DEX.filter(inRegion).map(d => d.id);
   }
 
   /* สายพันธุ์ที่ "เจอได้จริง" ในโซนนี้ — โอกาสเจออย่างน้อย MIN_SHOW ของทั้งหมด

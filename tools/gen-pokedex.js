@@ -1,5 +1,5 @@
 /* =====================================================================
- * gen-pokedex.js — สร้าง js/gen1.js จากข้อมูลจริงของ PokeAPI (ไฟล์ CSV)
+ * gen-pokedex.js — สร้าง js/dex.js จากข้อมูลจริงของ PokeAPI (ไฟล์ CSV)
  *
  *   node tools/gen-pokedex.js /path/to/csvdir
  *
@@ -50,33 +50,58 @@ const trigName = new Map(triggers.map(t => [t.id, t.identifier]));
 
 const STAT = { '1': 'hp', '2': 'atk', '3': 'def', '4': 'spa', '5': 'spd', '6': 'spe' };
 
-// ร่างเมก้าทางการของสายพันธุ์ Gen 1 เท่านั้น (15 ร่างจาก 13 สายพันธุ์)
-// PokeAPI มีร่างเมก้าอื่นปนมาด้วย (Raichu, Clefable, Starmie, Dragonite) ซึ่งไม่ใช่ของ Game Freak
+// ขอบเขตของเกม: Gen 1-3 (Kanto 1-151, Johto 152-251, Hoenn 252-386)
+const MAX_ID = 386;
+
+/* ร่างเมก้า/ไพรมัลทางการของ Gen 1-3 รวม 43 ร่าง — ระบุ id ตรง ๆ เพราะ
+ * PokeAPI มีร่างที่แฟนทำปนมาด้วยตั้งแต่ id 10278 ขึ้นไป
+ * (Clefable, Victreebel, Starmie, Dragonite, Meganium, Feraligatr, Skarmory)
+ * ซึ่งไม่ใช่ของ Game Freak จึงต้องกรองด้วยรายการที่กำหนดไว้ชัดเจน */
 const OFFICIAL_MEGA = new Set([
+  // Gen 1 — 15 ร่าง
   '10033', '10034', '10035', '10036', '10037', '10038', '10039',
-  '10040', '10041', '10042', '10043', '10044', '10071', '10073', '10090'
+  '10040', '10041', '10042', '10043', '10044', '10071', '10073', '10090',
+  // Gen 2 — 6 ร่าง
+  '10045', '10046', '10047', '10048', '10049', '10072',
+  // Gen 3 — 22 ร่าง (รวมไพรมัลของ Kyogre กับ Groudon)
+  '10050', '10051', '10052', '10053', '10054', '10055', '10056', '10057',
+  '10062', '10063', '10064', '10065', '10066', '10067', '10070', '10074',
+  '10076', '10077', '10078', '10079', '10087', '10089'
 ]);
 // ชื่อหินเมก้าประจำแต่ละสายพันธุ์
 const STONE = {
+  // Kanto
   3: 'Venusaurite', 6: 'Charizardite', 9: 'Blastoisinite', 15: 'Beedrillite',
   18: 'Pidgeotite', 65: 'Alakazite', 80: 'Slowbronite', 94: 'Gengarite',
   115: 'Kangaskhanite', 127: 'Pinsirite', 130: 'Gyaradosite',
-  142: 'Aerodactylite', 150: 'Mewtwonite'
+  142: 'Aerodactylite', 150: 'Mewtwonite',
+  // Johto
+  181: 'Ampharosite', 208: 'Steelixite', 212: 'Scizorite',
+  214: 'Heracronite', 229: 'Houndoominite', 248: 'Tyranitarite',
+  // Hoenn
+  254: 'Sceptilite', 257: 'Blazikenite', 260: 'Swampertite',
+  282: 'Gardevoirite', 302: 'Sablenite', 303: 'Mawilite', 306: 'Aggronite',
+  308: 'Medichamite', 310: 'Manectite', 319: 'Sharpedonite',
+  323: 'Cameruptite', 334: 'Altarianite', 354: 'Banettite', 359: 'Absolite',
+  362: 'Glalitite', 373: 'Salamencite', 376: 'Metagrossite',
+  380: 'Latiasite', 381: 'Latiosite', 384: 'Rayquazite',
+  // ไพรมัลไม่ได้ใช้หินเมก้า แต่ใช้กลไกเดียวกันในเกมนี้
+  382: 'Blue Orb', 383: 'Red Orb'
 };
 
-/* ---------- เก็บเฉพาะ Gen 1 (species id 1-151) ---------- */
-const gen1 = species.filter(s => Number(s.id) <= 151 && s.generation_id === '1');
+/* ---------- เก็บ Gen 1-3 (species id 1-386) ---------- */
+const gen1 = species.filter(s => Number(s.id) <= MAX_ID);
 
 // id ของ pokemon (ฟอร์มหลัก) ตรงกับ species id สำหรับ Gen 1
 const defaultPokemon = new Map();
 for (const p of pokemon) {
-  if (p.is_default === '1' && Number(p.species_id) <= 151) defaultPokemon.set(p.species_id, p);
+  if (p.is_default === '1' && Number(p.species_id) <= MAX_ID) defaultPokemon.set(p.species_id, p);
 }
 
 const statsBy = new Map();
 for (const r of pStats) {
   const key = r.pokemon_id;
-  if (Number(key) > 151 && !OFFICIAL_MEGA.has(key)) continue;
+  if (Number(key) > MAX_ID && !OFFICIAL_MEGA.has(key)) continue;
   const slot = STAT[r.stat_id];
   if (!slot) continue;
   if (!statsBy.has(key)) statsBy.set(key, {});
@@ -85,7 +110,7 @@ for (const r of pStats) {
 
 const typesBy = new Map();
 for (const r of pTypes) {
-  if (Number(r.pokemon_id) > 151 && !OFFICIAL_MEGA.has(r.pokemon_id)) continue;
+  if (Number(r.pokemon_id) > MAX_ID && !OFFICIAL_MEGA.has(r.pokemon_id)) continue;
   if (!typesBy.has(r.pokemon_id)) typesBy.set(r.pokemon_id, []);
   typesBy.get(r.pokemon_id)[Number(r.slot) - 1] = typeName.get(r.type_id);
 }
@@ -97,7 +122,7 @@ for (const r of names) if (r.local_language_id === '2') roomaji.set(r.pokemon_sp
 // เงื่อนไขวิวัฒนาการ — เอาแถวแรกของแต่ละร่างที่วิวัฒน์ไป
 const evoBy = new Map();
 for (const r of evolution) {
-  if (Number(r.evolved_species_id) > 151) continue;
+  if (Number(r.evolved_species_id) > MAX_ID) continue;
   if (evoBy.has(r.evolved_species_id)) continue;
   evoBy.set(r.evolved_species_id, {
     trigger: trigName.get(r.evolution_trigger_id) || 'level-up',
@@ -110,10 +135,9 @@ for (const r of evolution) {
 const dex = [];
 for (const s of gen1) {
   const id = s.id;
-  // ร่างก่อนหน้าที่อยู่นอก Gen 1 (เช่น Pichu -> Pikachu) ไม่นับ
-  // ไม่งั้น Pikachu, Jigglypuff, Snorlax ฯลฯ จะซื้อไม่ได้เลย
+  // ร่างก่อนหน้าที่อยู่นอกขอบเขต ไม่นับ — ตัวนั้นจะกลายเป็นร่างเริ่มต้นที่ซื้อได้
   const fromRaw = num(s.evolves_from_species_id);
-  const from = (fromRaw && fromRaw <= 151) ? fromRaw : null;
+  const from = (fromRaw && fromRaw <= MAX_ID) ? fromRaw : null;
   const st = statsBy.get(id);
   const ty = (typesBy.get(id) || []).filter(Boolean);
   if (!st || !ty.length) { console.warn('ข้ามตัวที่ข้อมูลไม่ครบ:', s.identifier); continue; }
@@ -181,7 +205,8 @@ const megaLines = megas.map(m =>
   `bst:${m.bst},stone:'${m.stone}'}`);
 
 const out = `/* =====================================================================
- * gen1.js — โปเกม่อน Gen 1 ครบ 151 ตัว (สร้างอัตโนมัติ ห้ามแก้มือ)
+ * dex.js — โปเกม่อน Gen 1-3 ครบ 386 ตัว (สร้างอัตโนมัติ ห้ามแก้มือ)
+ *   Kanto 1-151 · Johto 152-251 · Hoenn 252-386
  *
  * สร้างโดย tools/gen-pokedex.js จากไฟล์ CSV ของโปรเจกต์ PokeAPI
  * https://github.com/PokeAPI/pokeapi (data/v2/csv)
@@ -228,10 +253,10 @@ ${megaLines.join(',\n')}
 })(window.PTD = window.PTD || {});
 `;
 
-fs.writeFileSync(path.join(__dirname, '..', 'js', 'gen1.js'), out);
+fs.writeFileSync(path.join(__dirname, '..', 'js', 'dex.js'), out);
 
 /* ---------- รายงาน ---------- */
-console.log('เขียน js/gen1.js แล้ว:', dex.length, 'ตัว +', megas.length, 'ร่างเมก้า');
+console.log('เขียน js/dex.js แล้ว:', dex.length, 'ตัว +', megas.length, 'ร่างเมก้า');
 console.log('เมก้า:', megas.map(m => m.name).join(', '));
 const habCount = {};
 for (const d of dex) habCount[d.habitat] = (habCount[d.habitat] || 0) + 1;

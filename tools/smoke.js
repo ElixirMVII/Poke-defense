@@ -20,7 +20,12 @@ fs.mkdirSync(OUT, { recursive: true });
   page.on('console', m => { if (m.type() === 'error') errors.push('[console] ' + m.text()); });
   page.on('pageerror', e => errors.push('[pageerror] ' + e.message + '\n  ' +
     (e.stack || '').split('\n').slice(1, 4).join('\n  ')));
-  page.on('requestfailed', r => errors.push('[net] ' + r.url().slice(-50) + ' ' + (r.failure() || {}).errorText));
+  page.on('requestfailed', r => {
+    const why = (r.failure() || {}).errorText || '';
+    // ภาพที่ยังโหลดไม่เสร็จตอนเปลี่ยนหน้าจะถูกยกเลิก ไม่ใช่ความผิดพลาดจริง
+    if (why.includes('ERR_ABORTED')) return;
+    errors.push('[net] ' + r.url().slice(-50) + ' ' + why);
+  });
 
   const step = async (name, fn) => {
     try { const r = await fn(); console.log('✓', name, r === undefined ? '' : JSON.stringify(r)); return r; }
@@ -354,7 +359,7 @@ fs.mkdirSync(OUT, { recursive: true });
   /* ---------- 6. เควสในตำนาน ---------- */
   await step('เควสล็อกอยู่ตอนยังไม่ถึงเงื่อนไข', async () => {
     return await page.evaluate(() => {
-      const q = PTD.campaign.questById('q-mewtwo');
+      const q = PTD.campaign.questById('q-150');
       return { unlocked: PTD.campaign.questUnlocked(q), need: q.need };
     });
   });
@@ -365,7 +370,7 @@ fs.mkdirSync(OUT, { recursive: true });
       for (const st of PTD.campaign.STAGES.slice(0, 2)) PTD.save.clearStage(st.id);
       for (let id = 1; id <= 14; id++) if (!PTD.save.data.caught.includes(id)) PTD.save.addMon(id, 30);
       PTD.save.setParty(PTD.save.data.box.slice(-6).map(m => m.uid));
-      const q = PTD.campaign.questById('q-articuno');
+      const q = PTD.campaign.questById('q-144');
       PTD.battle.enter({ quest: q });
       const B = PTD.battle, M = PTD.map;
       const spots = [];

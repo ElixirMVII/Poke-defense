@@ -185,10 +185,10 @@
 
         <h4 class="adm-sub">เพิ่มโปเกม่อน</h4>
         <div class="adm-row wrap">
-          <input type="number" id="giveId" placeholder="เลขเด็กซ์ 1-151" min="1" max="151">
+          <input type="number" id="giveId" placeholder="เลขเด็กซ์ 1-${PTD.DEX.length}" min="1" max="${PTD.DEX.length}">
           <input type="number" id="giveLv" placeholder="เลเวล" value="20" min="1" max="${PTD.MAX_LEVEL}">
           <button id="admGive">เพิ่มเข้ากล่อง</button>
-          <button id="admGiveAll" class="mega">ให้ครบ 151 ตัว</button>
+          <button id="admGiveAll" class="mega">ให้ครบ ${PTD.DEX.length} ตัว</button>
         </div>
 
         <div class="adm-bar">
@@ -223,7 +223,7 @@
     const give = $('admGive');
     if (give) give.onclick = () => {
       const dexId = Number($('giveId').value), lv = Number($('giveLv').value) || 1;
-      if (!(dexId >= 1 && dexId <= 151)) { PTD.ui.toast('เลขเด็กซ์ต้องอยู่ระหว่าง 1-151'); return; }
+      if (!(dexId >= 1 && dexId <= PTD.DEX.length)) { PTD.ui.toast('เลขเด็กซ์ต้องอยู่ระหว่าง 1-' + PTD.DEX.length); return; }
       const data = sv();
       data.box = data.box || [];
       data.box.push({ uid: Date.now() + Math.floor(Math.random() * 1000), id: dexId, lv, exp: 0 });
@@ -236,16 +236,16 @@
 
     const giveAll = $('admGiveAll');
     if (giveAll) giveAll.onclick = () => {
-      if (!confirm('ใส่โปเกม่อนครบ 151 ตัวเข้ากล่องคนนี้?')) return;
+      if (!confirm('ใส่โปเกม่อนครบ ' + PTD.DEX.length + ' ตัวเข้ากล่องคนนี้?')) return;
       const data = sv();
       data.box = data.box || [];
       const lv = Number($('giveLv').value) || 20;
       let uid = Date.now();
-      for (let i = 1; i <= 151; i++) data.box.push({ uid: uid++, id: i, lv, exp: 0 });
-      data.caught = Array.from({ length: 151 }, (_, i) => i + 1);
+      for (let i = 1; i <= PTD.DEX.length; i++) data.box.push({ uid: uid++, id: i, lv, exp: 0 });
+      data.caught = Array.from({ length: PTD.DEX.length }, (_, i) => i + 1);
       data.seen = data.caught.slice();
       PTD.auth.writeSaveOf(id, data);
-      PTD.ui.toast('ให้ครบ 151 ตัวแล้ว');
+      PTD.ui.toast('ให้ครบ ' + PTD.DEX.length + ' ตัวแล้ว');
       show();
     };
 

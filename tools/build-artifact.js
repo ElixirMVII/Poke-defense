@@ -21,8 +21,10 @@ const SRC = process.argv[2] || '/tmp/claude-0/sprites';
 const DIST = path.join(REPO, 'dist');
 const ANIM_DIR = path.join(SRC, 'versions/generation-v/black-white/animated');
 
-const MEGA_IDS = [10033, 10034, 10035, 10036, 10037, 10038, 10039,
-                  10040, 10041, 10042, 10043, 10044, 10071, 10073, 10090];
+// อ่าน id ร่างเมก้าจากข้อมูลที่สร้างไว้ จะได้ไม่ต้องตามแก้เวลาเพิ่มเจน
+const DEX_SRC = fs.readFileSync(path.join(REPO, 'js/dex.js'), 'utf8');
+const MEGA_IDS = [...DEX_SRC.matchAll(/form:(\d+)/g)].map(m => Number(m[1]));
+const SPECIES_MAX = Math.max(...[...DEX_SRC.matchAll(/^  \{id:(\d+),/gm)].map(m => Number(m[1])));
 
 /* ---------- เตรียมโฟลเดอร์ ---------- */
 fs.rmSync(DIST, { recursive: true, force: true });
@@ -47,7 +49,8 @@ if (scripts.length < 10) throw new Error('หาสคริปต์ไม่�
 const bootstrap = `<script>
 // สไปรท์ถูกแนบมากับหน้านี้ทั้งหมด ไม่ต้องพึ่งอินเทอร์เน็ตภายนอก
 window.PTD_SPRITE_BASE = 'sprites';
-window.PTD_ANIM_PACK = { b64: 'sprites/anim.b64.txt', idx: 'sprites/anim.json' };
+window.PTD_ANIM_PACK  = { idx: 'sprites/anim.json' };
+window.PTD_STILL_PACK = { idx: 'sprites/still.json' };
 </script>`;
 
 const bundle = scripts.map(f =>
@@ -71,6 +74,43 @@ html = html
 // ใส่ title กับ style กลับเข้าไปที่หัวไฟล์ตามที่หน้าเว็บที่เผยแพร่ต้องการ
 html = `<title>${title}</title>\n<style>\n${css}\n</style>\n\n` + html;
 
+/* ---------- ตัวช่วยแพ็กสไปรท์ ----------
+ * ต่อไฟล์ทั้งหมดเข้าด้วยกันแล้วทำดัชนีบอกตำแหน่ง จากนั้นเข้ารหัส base64
+ * แล้ว **หั่นเป็นชิ้น ๆ** เพราะที่เผยแพร่จำกัดขนาดไฟล์ละ 16 MB
+ * ส่วน GIF ของ 386 ตัวรวมกัน 14 MB ซึ่ง base64 แล้วจะเป็น ~19 MB */
+const CHUNK_BYTES = 6 * 1024 * 1024;     // base64 ต่อชิ้น เผื่อไว้จากขีดจำกัด 16 MB มาก ๆ
+
+function packSprites(ids, srcOf, label) {
+  const bufs = [];
+  const index = {};
+  let offset = 0, count = 0, missing = 0;
+  for (const id of ids) {
+    const src = srcOf(id);
+    if (!fs.existsSync(src)) { missing++; continue; }
+    const buf = fs.readFileSync(src);
+    bufs.push(buf);
+    index[id] = [offset, buf.length];
+    offset += buf.length;
+    count++;
+  }
+  if (missing) console.warn(`ไม่มี${label} ${missing} ไฟล์`);
+  return { data: Buffer.concat(bufs), index, count, bytes: offset };
+}
+
+function writePack(name, pack) {
+  const b64 = pack.data.toString('base64');
+  const parts = [];
+  for (let i = 0; i < b64.length; i += CHUNK_BYTES) {
+    const file = `${name}.b64.${parts.length}.txt`;
+    fs.writeFileSync(path.join(DIST, 'sprites', file), b64.slice(i, i + CHUNK_BYTES));
+    parts.push('sprites/' + file);
+  }
+  fs.writeFileSync(path.join(DIST, 'sprites', `${name}.json`),
+    JSON.stringify({ parts, index: pack.index }));
+  pack.parts = parts;
+  return pack;
+}
+
 /* ---------- 3. คัดลอกไฟล์ฟอนต์ ---------- */
 fs.mkdirSync(path.join(DIST, 'fonts'), { recursive: true });
 let fontFiles = 0;
@@ -82,30 +122,29 @@ for (const f of fs.readdirSync(path.join(REPO, 'fonts'))) {
 
 /* ---------- 4. คัดลอกภาพนิ่ง ---------- */
 let stills = 0;
-for (const id of [...Array(151).keys()].map(i => i + 1).concat(MEGA_IDS)) {
+/* ภาพนิ่งมี 386 ตัว + 43 ร่างเมก้า = 429 ไฟล์ เกินขีดจำกัด 255 ไฟล์ต่อหนึ่งชุด
+ * แต่รวมกันแล้วแค่ ~340 KB จึงยัดเป็น data: URL ไว้ในไฟล์เดียวไปเลย
+ * ข้อดีคือ stillURL() ยังคืนค่าแบบทันที ไม่ต้องแก้ทุกที่ที่เอาไปใส่ <img src>  */
+const stillIds = [...Array(SPECIES_MAX).keys()].map(i => i + 1).concat(MEGA_IDS);
+const stillMap = {};
+let stillBytes = 0;
+for (const id of stillIds) {
   const src = path.join(SRC, `${id}.png`);
-  if (!fs.existsSync(src)) { console.warn('ไม่มีภาพนิ่ง:', id); continue; }
-  fs.copyFileSync(src, path.join(DIST, 'sprites', `${id}.png`));
+  if (!fs.existsSync(src)) continue;
+  const buf = fs.readFileSync(src);
+  stillBytes += buf.length;
+  stillMap[id] = 'data:image/png;base64,' + buf.toString('base64');
   stills++;
 }
+fs.writeFileSync(path.join(DIST, 'sprites', 'still.json'), JSON.stringify(stillMap));
 
-/* ---------- 5. แพ็ก GIF เคลื่อนไหวเป็นไฟล์เดียว ---------- */
-// แนบไฟล์ได้จำกัดจำนวน จะแนบ GIF ทีละไฟล์ไม่ได้ เลยต่อกันแล้วทำดัชนีไว้
-const chunks = [];
-const index = {};
-let offset = 0, anims = 0;
-for (let id = 1; id <= 151; id++) {
-  const src = path.join(ANIM_DIR, `${id}.gif`);
-  if (!fs.existsSync(src)) { console.warn('ไม่มี GIF:', id); continue; }
-  const buf = fs.readFileSync(src);
-  chunks.push(buf);
-  index[id] = [offset, buf.length];
-  offset += buf.length;
-  anims++;
-}
-const packed = Buffer.concat(chunks);
-fs.writeFileSync(path.join(DIST, 'sprites', 'anim.b64.txt'), packed.toString('base64'));
-fs.writeFileSync(path.join(DIST, 'sprites', 'anim.json'), JSON.stringify(index));
+/* ---------- 5. แพ็ก GIF เคลื่อนไหว ---------- */
+const animPack = packSprites(
+  [...Array(SPECIES_MAX).keys()].map(i => i + 1),
+  (id) => path.join(ANIM_DIR, `${id}.gif`), 'GIF');
+const anims = animPack.count;
+const offset = animPack.bytes;
+writePack('anim', animPack);
 
 fs.writeFileSync(path.join(DIST, 'index.html'), html);
 
@@ -120,7 +159,13 @@ console.log('สร้าง dist/ เรียบร้อย');
 console.log('  index.html      ', kb(Buffer.byteLength(html)),
   `(รวม ${scripts.length} สคริปต์ + CSS + ประกาศฟอนต์)`);
 console.log('  ฟอนต์            ', fontFiles, 'ไฟล์');
-console.log('  ภาพนิ่ง          ', stills, 'ไฟล์');
-console.log('  GIF ในแพ็ก      ', anims, 'ตัว,', mb(offset), '-> base64', mb(Math.ceil(offset * 4 / 3)));
+console.log('  ภาพนิ่ง (data URL)', stills, 'ตัว,', mb(stillBytes),
+  '-> still.json', mb(fs.statSync(path.join(DIST, 'sprites', 'still.json')).size));
+console.log('  GIF ในแพ็ก      ', anims, 'ตัว,', mb(offset),
+  `-> ${animPack.parts.length} ชิ้น`);
 console.log('  รวมโฟลเดอร์รูป  ', mb(spriteBytes));
-console.log('  จำนวนไฟล์ทั้งหมด', 1 + fontFiles + stills + 2, '(ขีดจำกัด 255)');
+const fileCount = fs.readdirSync(path.join(DIST, 'sprites')).length + fontFiles + 1;
+console.log('  จำนวนไฟล์ทั้งหมด', fileCount, '(ขีดจำกัด 255)');
+const biggest = Math.max(...fs.readdirSync(path.join(DIST, 'sprites'))
+  .map(f => fs.statSync(path.join(DIST, 'sprites', f)).size));
+console.log('  ไฟล์ใหญ่สุด      ', mb(biggest), '(ขีดจำกัด 16 MB)');
